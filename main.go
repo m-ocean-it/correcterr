@@ -65,11 +65,50 @@ func main() {
 			return true
 		}
 
-		xIsErr := isError(binExpr.X, info)
-		yIsErr := isError(binExpr.Y, info)
+		if !isError(binExpr.X, info) {
+			return true
+		}
 
-		fmt.Println("x is err:", xIsErr)
-		fmt.Println("y is err:", yIsErr)
+		xIdent, ok := binExpr.X.(*ast.Ident)
+		if !ok {
+			return true
+		}
+
+		yIdent, ok := binExpr.Y.(*ast.Ident)
+		if !ok {
+			return true
+		}
+
+		if yIdent.Obj != nil {
+			return true
+		}
+
+		if yIdent.Name != "nil" {
+			return true
+		}
+
+		for _, bodyStmt := range ifStmt.Body.List {
+			retStmt, ok := bodyStmt.(*ast.ReturnStmt)
+			if !ok {
+				continue
+			}
+
+			for _, res := range retStmt.Results {
+				if !isError(res, info) {
+					continue
+				}
+
+				errIdent, ok := res.(*ast.Ident)
+				if !ok {
+					continue
+				}
+
+				if errIdent.Name != xIdent.Name {
+					fmt.Printf("%s: oops\n",
+						fset.Position(errIdent.Pos()))
+				}
+			}
+		}
 
 		return true
 	})
