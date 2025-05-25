@@ -101,3 +101,25 @@ func ErrorfWrap() error {
 
 	return nil
 }
+
+func ErrorfWrap2() error {
+	err1 := errors.New("1")
+	err2 := errors.New("2")
+
+	if err1 != nil {
+		return fmt.Errorf("errors: %w, %w", err1, err2)
+	}
+
+	return nil
+}
+
+func Closure() {
+	var err error
+	func() error {
+		if innerErr := errors.New("inner"); innerErr != nil {
+			return err // want "returning not the error that was checked"
+		}
+
+		return nil
+	}()
+}

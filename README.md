@@ -16,6 +16,11 @@ if txErr := doSmth(); txErr != nil {
 }
 ```
 
+```go
+if err != nil {
+    return fmt.Errorf("error: %w", anotherErr) // will be reported
+}
+```
 
 ## Roadmap
 

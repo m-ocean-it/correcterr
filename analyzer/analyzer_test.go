@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	_ "github.com/pkg/errors"
 	"golang.org/x/tools/go/analysis/analysistest"
 )
 
