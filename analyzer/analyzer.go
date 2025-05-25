@@ -71,13 +71,35 @@ func run(pass *analysis.Pass) (any, error) {
 					continue
 				}
 
-				errIdent, ok := res.(*ast.Ident)
-				if !ok {
-					continue
-				}
+				switch t := res.(type) {
+				case *ast.Ident:
+					if t.Name != xIdent.Name {
+						pass.Reportf(retStmt.Pos(), "returning not the error that was checked")
+					}
+				case *ast.CallExpr:
+					var returns bool
+					var callExpectsErr bool
+					for _, arg := range t.Args {
+						if !ExprIsError(arg, pass.TypesInfo) {
+							continue
+						}
 
-				if errIdent.Name != xIdent.Name {
-					pass.Reportf(retStmt.Pos(), "returning not the error that was checked")
+						callExpectsErr = true
+
+						argIdent, ok := arg.(*ast.Ident)
+						if !ok {
+							continue
+						}
+
+						if argIdent.Name == xIdent.Name {
+							returns = true
+							break
+						}
+					}
+
+					if callExpectsErr && !returns {
+						pass.Reportf(retStmt.Pos(), "returning not the error that was checked")
+					}
 				}
 			}
 		}
