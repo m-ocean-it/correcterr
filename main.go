@@ -7,13 +7,16 @@ import (
 	"go/types"
 
 	"golang.org/x/tools/go/analysis"
+	"golang.org/x/tools/go/analysis/passes/inspect"
 	"golang.org/x/tools/go/analysis/singlechecker"
+	"golang.org/x/tools/go/ast/inspector"
 )
 
 var Analyzer = &analysis.Analyzer{
-	Name: "correcterr",
-	Doc:  "Checks that the returned error is the one that was checked",
-	Run:  run,
+	Name:     "correcterr",
+	Doc:      "Checks that the returned error is the one that was checked",
+	Run:      run,
+	Requires: []*analysis.Analyzer{inspect.Analyzer},
 }
 
 func main() {
@@ -24,45 +27,46 @@ func main() {
 }
 
 func run(pass *analysis.Pass) (any, error) {
-	inspect := func(node ast.Node) bool {
+	inspector := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
+
+	nodeFilter := []ast.Node{(*ast.IfStmt)(nil)}
+
+	inspector.Preorder(nodeFilter, func(node ast.Node) {
 		if node == nil {
-			return false
+			return
 		}
 
-		ifStmt, ok := node.(*ast.IfStmt)
-		if !ok {
-			return true
-		}
+		ifStmt := node.(*ast.IfStmt)
 
 		binExpr, ok := ifStmt.Cond.(*ast.BinaryExpr)
 		if !ok {
-			return true
+			return
 		}
 
 		if binExpr.Op != token.NEQ {
-			return true
+			return
 		}
 
 		if !ExprIsError(binExpr.X, pass.TypesInfo) {
-			return true
+			return
 		}
 
 		xIdent, ok := binExpr.X.(*ast.Ident)
 		if !ok {
-			return true
+			return
 		}
 
 		yIdent, ok := binExpr.Y.(*ast.Ident)
 		if !ok {
-			return true
+			return
 		}
 
 		if yIdent.Obj != nil {
-			return true
+			return
 		}
 
 		if yIdent.Name != "nil" {
-			return true
+			return
 		}
 
 		for _, bodyStmt := range ifStmt.Body.List {
@@ -86,14 +90,7 @@ func run(pass *analysis.Pass) (any, error) {
 				}
 			}
 		}
-
-		return true
-
-	}
-
-	for _, f := range pass.Files {
-		ast.Inspect(f, inspect)
-	}
+	})
 
 	return nil, nil
 }
