@@ -77,7 +77,7 @@ func run(pass *analysis.Pass) (any, error) {
 				}
 
 				if errIdent.Name != xIdent.Name {
-					pass.Reportf(node.Pos(), "returning not the error that was checked")
+					pass.Reportf(retStmt.Pos(), "returning not the error that was checked")
 				}
 			}
 		}
