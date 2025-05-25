@@ -8,6 +8,8 @@ import (
 	"go/parser"
 	"go/token"
 	"go/types"
+	"os"
+	"strings"
 
 	_ "github.com/m-ocean-it/correcterr/pkg/analyzer"
 	_ "golang.org/x/tools/go/analysis/singlechecker"
@@ -21,6 +23,25 @@ import (
 // }
 
 func main() {
+	if len(os.Args) < 2 {
+		fmt.Println("No arguments provided. Exiting.")
+		os.Exit(1)
+	}
+
+	for _, filePath := range os.Args[1:] {
+		if filePath == "--" {
+			continue
+		}
+
+		if !strings.HasSuffix(filePath, ".go") {
+			continue
+		}
+
+		lintFile(filePath)
+	}
+}
+
+func lintFile(path string) {
 	isError := func(v ast.Expr, info *types.Info) bool {
 		if n, ok := info.TypeOf(v).(*types.Named); ok {
 			o := n.Obj()
@@ -32,7 +53,7 @@ func main() {
 
 	// We parse the AST
 	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, "testdata/src/p/err_mistakes.go", nil, 0)
+	f, err := parser.ParseFile(fset, path, nil, 0)
 	if err != nil {
 		fmt.Println(err)
 		return
