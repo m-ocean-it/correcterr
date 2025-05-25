@@ -125,7 +125,7 @@ func lintFile(path string) {
 				}
 
 				if errIdent.Name != xIdent.Name {
-					fmt.Printf("%s: oops\n",
+					fmt.Printf("%s: returning not the error that was checked\n",
 						fset.Position(errIdent.Pos()))
 				}
 			}
