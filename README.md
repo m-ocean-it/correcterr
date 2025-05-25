@@ -24,16 +24,18 @@ if err != nil {
 
 ## Roadmap
 
-### Account for `errors.Is` checks
+- [ ] Account for `errors.Is` checks
 ```go
 if errors.Is(err1, err2) {
     return err2 // want "returning not the error that was checked"
 }
 ```
 
-### Check for `nil`-error returns
+- [ ] Check for `nil`-error returns
 ```go
 if err == nil {
     return err // want "returning err when nil"
 }
 ```
+
+- [ ] Pull request to `golangci-lint`
