@@ -2,72 +2,29 @@ package main
 
 import (
 	_ "flag"
-	"fmt"
 	"go/ast"
-	"go/importer"
-	"go/parser"
 	"go/token"
 	"go/types"
-	"os"
-	"strings"
 
-	_ "github.com/m-ocean-it/correcterr/pkg/analyzer"
-	_ "golang.org/x/tools/go/analysis/singlechecker"
+	"golang.org/x/tools/go/analysis"
+	"golang.org/x/tools/go/analysis/singlechecker"
 )
 
-// func main() {
-// 	// Don't use it: just to not crash on -unsafeptr flag from go vet
-// 	// flag.Bool("unsafeptr", false, "")
-
-// 	// singlechecker.Main(analyzer.Analyzer)
-// }
-
-func main() {
-	if len(os.Args) < 2 {
-		fmt.Println("No arguments provided. Exiting.")
-		os.Exit(1)
-	}
-
-	for _, filePath := range os.Args[1:] {
-		if filePath == "--" {
-			continue
-		}
-
-		if !strings.HasSuffix(filePath, ".go") {
-			continue
-		}
-
-		lintFile(filePath)
-	}
+var Analyzer = &analysis.Analyzer{
+	Name: "correcterr",
+	Doc:  "Checks that the returned error is the one that was checked",
+	Run:  run,
 }
 
-func lintFile(path string) {
-	isError := func(v ast.Expr, info *types.Info) bool {
-		if n, ok := info.TypeOf(v).(*types.Named); ok {
-			o := n.Obj()
-			return o != nil && o.Pkg() == nil && o.Name() == "error"
-		}
+func main() {
+	// Don't use it: just to not crash on -unsafeptr flag from go vet
+	// flag.Bool("unsafeptr", false, "")
 
-		return false
-	}
+	singlechecker.Main(Analyzer)
+}
 
-	// We parse the AST
-	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, path, nil, 0)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	// We extract type info
-	info := &types.Info{Types: make(map[ast.Expr]types.TypeAndValue)}
-	conf := types.Config{Importer: importer.Default()}
-	if _, err = conf.Check("p", fset, []*ast.File{f}, info); err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	ast.Inspect(f, func(node ast.Node) bool {
+func run(pass *analysis.Pass) (any, error) {
+	inspect := func(node ast.Node) bool {
 		if node == nil {
 			return false
 		}
@@ -86,7 +43,7 @@ func lintFile(path string) {
 			return true
 		}
 
-		if !isError(binExpr.X, info) {
+		if !ExprIsError(binExpr.X, pass.TypesInfo) {
 			return true
 		}
 
@@ -115,7 +72,7 @@ func lintFile(path string) {
 			}
 
 			for _, res := range retStmt.Results {
-				if !isError(res, info) {
+				if !ExprIsError(res, pass.TypesInfo) {
 					continue
 				}
 
@@ -125,12 +82,27 @@ func lintFile(path string) {
 				}
 
 				if errIdent.Name != xIdent.Name {
-					fmt.Printf("%s: returning not the error that was checked\n",
-						fset.Position(errIdent.Pos()))
+					pass.Reportf(node.Pos(), "returning not the error that was checked")
 				}
 			}
 		}
 
 		return true
-	})
+
+	}
+
+	for _, f := range pass.Files {
+		ast.Inspect(f, inspect)
+	}
+
+	return nil, nil
+}
+
+func ExprIsError(v ast.Expr, info *types.Info) bool {
+	if n, ok := info.TypeOf(v).(*types.Named); ok {
+		o := n.Obj()
+		return o != nil && o.Pkg() == nil && o.Name() == "error"
+	}
+
+	return false
 }
