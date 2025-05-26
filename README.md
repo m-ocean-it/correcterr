@@ -24,7 +24,7 @@ if err != nil {
 
 ## Installation
 ```sh
-go install github.com/m-ocean-it/correcterr
+go install github.com/m-ocean-it/correcterr@latest
 ```
 
 ## Usage
