@@ -22,6 +22,16 @@ if err != nil {
 }
 ```
 
+## Installation
+```sh
+go install github.com/m-ocean-it/correcterr
+```
+
+## Usage
+```sh
+correcterr ./...
+```
+
 ## Roadmap
 
 - [ ] Account for `errors.Is` checks
