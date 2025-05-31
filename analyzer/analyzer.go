@@ -29,34 +29,46 @@ func run(pass *analysis.Pass) (any, error) {
 
 		ifStmt := node.(*ast.IfStmt)
 
-		binExpr, ok := ifStmt.Cond.(*ast.BinaryExpr)
-		if !ok {
+		var checkedErrVars []*ast.Ident
+
+		switch ifExpr := ifStmt.Cond.(type) {
+		case *ast.BinaryExpr:
+			binExpr := ifExpr
+
+			if binExpr.Op != token.NEQ {
+				return
+			}
+
+			if !exprIsError(binExpr.X, pass.TypesInfo) {
+				return
+			}
+
+			id, ok := binExpr.X.(*ast.Ident)
+			if !ok {
+				return
+			}
+
+			rightVar, ok := binExpr.Y.(*ast.Ident)
+			if !ok {
+				return
+			}
+
+			if rightVar.Obj != nil {
+				return
+			}
+
+			if rightVar.Name != "nil" {
+				return
+			}
+
+			checkedErrVars = append(checkedErrVars, id)
+		case *ast.CallExpr:
+			checkedErrVars = append(checkedErrVars, scanCallForErrs(ifExpr, pass)...)
+		default:
 			return
 		}
 
-		if binExpr.Op != token.NEQ {
-			return
-		}
-
-		if !exprIsError(binExpr.X, pass.TypesInfo) {
-			return
-		}
-
-		leftErrVar, ok := binExpr.X.(*ast.Ident)
-		if !ok {
-			return
-		}
-
-		rightVar, ok := binExpr.Y.(*ast.Ident)
-		if !ok {
-			return
-		}
-
-		if rightVar.Obj != nil {
-			return
-		}
-
-		if rightVar.Name != "nil" {
+		if len(checkedErrVars) == 0 {
 			return
 		}
 
@@ -81,12 +93,12 @@ func run(pass *analysis.Pass) (any, error) {
 
 				switch returnVal := res.(type) {
 				case *ast.Ident:
-					if returnVal.Name == leftErrVar.Name {
+					if errIdentIsInList(returnVal, checkedErrVars) {
 						returns = true
 						break RETURN_RESULTS
 					}
 				case *ast.CallExpr:
-					rets, expects := inspectErrCall(leftErrVar, returnVal, pass)
+					rets, expects := inspectErrCall(checkedErrVars, returnVal, pass)
 					if rets {
 						returns = true
 						break RETURN_RESULTS
@@ -106,9 +118,11 @@ func run(pass *analysis.Pass) (any, error) {
 	return nil, nil
 }
 
-func inspectErrCall(leftErrVar *ast.Ident, call *ast.CallExpr, pass *analysis.Pass) (bool, bool) {
-	if callIsErrDotErrorOnTarget(call, leftErrVar) {
-		return true, false
+func inspectErrCall(checkedErrs []*ast.Ident, call *ast.CallExpr, pass *analysis.Pass) (bool, bool) {
+	for _, checkedErr := range checkedErrs {
+		if callIsErrDotErrorOnTarget(call, checkedErr) {
+			return true, false
+		}
 	}
 
 	var returns bool
@@ -124,12 +138,12 @@ LOOP:
 
 		switch typedArg := arg.(type) {
 		case *ast.Ident:
-			if typedArg.Name == leftErrVar.Name {
+			if errIdentIsInList(typedArg, checkedErrs) {
 				returns = true
 				break LOOP
 			}
 		case *ast.CallExpr:
-			rets, _ := inspectErrCall(leftErrVar, typedArg, pass)
+			rets, _ := inspectErrCall(checkedErrs, typedArg, pass)
 			if rets {
 				returns = true
 				break LOOP
@@ -173,4 +187,33 @@ func callIsErrDotErrorOnTarget(call *ast.CallExpr, target *ast.Ident) bool {
 	}
 
 	return selExpr.Sel.Name == "Error" && selExpr.Sel.Obj == nil
+}
+
+func scanCallForErrs(call *ast.CallExpr, pass *analysis.Pass) []*ast.Ident {
+	var errIdents []*ast.Ident
+
+	for _, arg := range call.Args {
+		if !exprIsError(arg, pass.TypesInfo) {
+			continue
+		}
+
+		switch typedArg := arg.(type) {
+		case *ast.Ident:
+			errIdents = append(errIdents, typedArg)
+		case *ast.CallExpr:
+			errIdents = append(errIdents, scanCallForErrs(typedArg, pass)...)
+		}
+	}
+
+	return errIdents
+}
+
+func errIdentIsInList(target *ast.Ident, errIdents []*ast.Ident) bool {
+	for _, eID := range errIdents {
+		if eID.Name == target.Name {
+			return true
+		}
+	}
+
+	return false
 }

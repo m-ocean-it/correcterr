@@ -162,6 +162,127 @@ func ReturningWrappedMessage() error {
 	return nil
 }
 
+func ErrorsIsCorrect() error {
+	err := errors.New("original")
+	wrappedErr := fmt.Errorf("wrapped: %w", err)
+	if errors.Is(wrappedErr, err) {
+		return wrappedErr
+	}
+
+	return nil
+}
+
+func ErrorsIsWrong() error {
+	err := errors.New("original")
+	anotherErr := errors.New("another")
+
+	wrappedErr := fmt.Errorf("wrapped: %w", err)
+	if errors.Is(wrappedErr, err) {
+		return anotherErr // want "returning not the error that was checked"
+	}
+
+	return nil
+}
+
+func FooCheckCorrect() error {
+	err := errors.New("some error")
+
+	if fooCheck(1, err, "a") {
+		return err
+	}
+
+	return nil
+}
+
+func FooCheckWrappedCorrect() error {
+	err := errors.New("some error")
+
+	if fooCheck(1, err, "a") {
+		return fmt.Errorf("error: %w", err)
+	}
+
+	return nil
+}
+
+func FooCheckReturnMessageCorrect() error {
+	err := errors.New("some error")
+
+	if fooCheck(1, err, "a") {
+		return errors.New(err.Error())
+	}
+
+	return nil
+}
+
+func FooCheckReturnMessageCorrectWrapped() error {
+	err := errors.New("some error")
+
+	if fooCheck(1, err, "a") {
+		return fmt.Errorf("error: %s", err.Error())
+	}
+
+	return nil
+}
+
+func FooCheckWrong() error {
+	err := errors.New("some error")
+	anotherErr := errors.New("another error")
+
+	if fooCheck(1, err, "a") {
+		return anotherErr // want "returning not the error that was checked"
+	}
+
+	return nil
+}
+
+func FooCheckWrappedWrong() error {
+	err := errors.New("some error")
+	anotherErr := errors.New("another error")
+
+	if fooCheck(1, err, "a") {
+		return fmt.Errorf("error: %w", anotherErr) // want "returning not the error that was checked"
+	}
+
+	return nil
+}
+
+func FooCheckReturnMessageWrong() error {
+	err := errors.New("some error")
+	anotherErr := errors.New("another error")
+
+	if fooCheck(1, err, "a") {
+		return fmt.Errorf("error: %s", anotherErr.Error()) // want "returning not the error that was checked"
+	}
+
+	return nil
+}
+
+func FooCheckCorrect2() (error, error) {
+	err := errors.New("some error")
+	anotherErr := errors.New("another error")
+
+	if fooCheck(1, err, "a") {
+		return err, anotherErr
+	}
+
+	return nil, nil
+}
+
+func CheckTwoErrorsCorrect() error {
+	err := errors.New("some error")
+	anotherErr := errors.New("another error")
+
+	if err != nil && anotherErr != nil {
+		return err
+	}
+
+	return nil
+}
+
 func fooWrap(_ int, err error, _ string) error {
 	return err
+}
+
+func fooCheck(_ int, err error, _ string) bool {
+	return err != nil
 }
