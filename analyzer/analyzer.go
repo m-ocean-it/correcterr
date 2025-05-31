@@ -112,6 +112,8 @@ func run(pass *analysis.Pass) (any, error) {
 			if callExpectsErr && !returns {
 				pass.Reportf(retStmt.Pos(), "returning not the error that was checked")
 			}
+
+			break
 		}
 	})
 
