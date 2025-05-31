@@ -93,6 +93,7 @@ func inspectErrCall(leftErrVar *ast.Ident, call *ast.CallExpr, pass *analysis.Pa
 	var returns bool
 	var callExpectsErr bool
 
+LOOP:
 	for _, arg := range call.Args {
 		if !ExprIsError(arg, pass.TypesInfo) {
 			continue
@@ -100,14 +101,18 @@ func inspectErrCall(leftErrVar *ast.Ident, call *ast.CallExpr, pass *analysis.Pa
 
 		callExpectsErr = true
 
-		argIdent, ok := arg.(*ast.Ident)
-		if !ok {
-			continue
-		}
-
-		if argIdent.Name == leftErrVar.Name {
-			returns = true
-			break
+		switch typedArg := arg.(type) {
+		case *ast.Ident:
+			if typedArg.Name == leftErrVar.Name {
+				returns = true
+				break LOOP
+			}
+		case *ast.CallExpr:
+			rets, _ := inspectErrCall(leftErrVar, typedArg, pass)
+			if rets {
+				returns = true
+				break LOOP
+			}
 		}
 	}
 

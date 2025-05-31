@@ -123,3 +123,25 @@ func Closure() {
 		return nil
 	}()
 }
+
+func DoubleWrap() error {
+	var err error
+	if err != nil {
+		return fmt.Errorf("error: %w", fmt.Errorf("error: %w", err))
+	}
+
+	return nil
+}
+
+func TripleFooWrap() error {
+	var err error
+	if err != nil {
+		return fooWrap(1, fooWrap(2, fooWrap(3, err, "c"), "b"), "a")
+	}
+
+	return nil
+}
+
+func fooWrap(_ int, err error, _ string) error {
+	return err
+}
