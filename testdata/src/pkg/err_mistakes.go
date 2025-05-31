@@ -286,3 +286,16 @@ func fooWrap(_ int, err error, _ string) error {
 func fooCheck(_ int, err error, _ string) bool {
 	return err != nil
 }
+
+// TODO
+// func CheckTwoErrorsWrong() error {
+// 	err := errors.New("some error")
+// 	anotherErr := errors.New("another error")
+// 	thirdErr := errors.New("third error")
+
+// 	if err != nil && anotherErr != nil {
+// 		return thirdErr // should error
+// 	}
+
+// 	return nil
+// }
