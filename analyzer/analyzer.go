@@ -38,7 +38,7 @@ func run(pass *analysis.Pass) (any, error) {
 			return
 		}
 
-		if !ExprIsError(binExpr.X, pass.TypesInfo) {
+		if !exprIsError(binExpr.X, pass.TypesInfo) {
 			return
 		}
 
@@ -66,8 +66,14 @@ func run(pass *analysis.Pass) (any, error) {
 				continue
 			}
 
+			var (
+				returns        bool
+				callExpectsErr bool
+			)
+
+		RETURN_RESULTS:
 			for _, res := range retStmt.Results {
-				if !ExprIsError(res, pass.TypesInfo) {
+				if !(exprIsError(res, pass.TypesInfo) || exprIsString(res, pass.TypesInfo)) {
 					continue
 				}
 
@@ -77,11 +83,19 @@ func run(pass *analysis.Pass) (any, error) {
 						pass.Reportf(retStmt.Pos(), "returning not the error that was checked")
 					}
 				case *ast.CallExpr:
-					returns, callExpectsErr := inspectErrCall(leftErrVar, returnVal, pass)
-					if callExpectsErr && !returns {
-						pass.Reportf(retStmt.Pos(), "returning not the error that was checked")
+					rets, expects := inspectErrCall(leftErrVar, returnVal, pass)
+					if rets {
+						returns = true
+						break RETURN_RESULTS
+					}
+					if expects {
+						callExpectsErr = true
 					}
 				}
+			}
+
+			if callExpectsErr && !returns {
+				pass.Reportf(retStmt.Pos(), "returning not the error that was checked")
 			}
 		}
 	})
@@ -90,16 +104,20 @@ func run(pass *analysis.Pass) (any, error) {
 }
 
 func inspectErrCall(leftErrVar *ast.Ident, call *ast.CallExpr, pass *analysis.Pass) (bool, bool) {
+	if callIsErrDotErrorOnTarget(call, leftErrVar) {
+		return true, false
+	}
+
 	var returns bool
 	var callExpectsErr bool
 
 LOOP:
 	for _, arg := range call.Args {
-		if !ExprIsError(arg, pass.TypesInfo) {
+		if exprIsError(arg, pass.TypesInfo) {
+			callExpectsErr = true
+		} else if !exprIsString(arg, pass.TypesInfo) {
 			continue
 		}
-
-		callExpectsErr = true
 
 		switch typedArg := arg.(type) {
 		case *ast.Ident:
@@ -119,11 +137,37 @@ LOOP:
 	return returns, callExpectsErr
 }
 
-func ExprIsError(v ast.Expr, info *types.Info) bool {
+func exprIsError(v ast.Expr, info *types.Info) bool {
 	if n, ok := info.TypeOf(v).(*types.Named); ok {
 		o := n.Obj()
 		return o != nil && o.Pkg() == nil && o.Name() == "error"
 	}
 
 	return false
+}
+
+func exprIsString(v ast.Expr, info *types.Info) bool {
+	if basicType, ok := info.TypeOf(v).(*types.Basic); ok {
+		return basicType.Name() == "string"
+	}
+
+	return false
+}
+
+func callIsErrDotErrorOnTarget(call *ast.CallExpr, target *ast.Ident) bool {
+	selExpr, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok || selExpr == nil || selExpr.Sel == nil {
+		return false
+	}
+
+	xIdent, ok := selExpr.X.(*ast.Ident)
+	if !ok || xIdent == nil {
+		return false
+	}
+
+	if xIdent.Name != target.Name {
+		return false
+	}
+
+	return selExpr.Sel.Name == "Error" && selExpr.Sel.Obj == nil
 }

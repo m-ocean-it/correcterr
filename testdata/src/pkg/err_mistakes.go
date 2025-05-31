@@ -142,6 +142,15 @@ func TripleFooWrap() error {
 	return nil
 }
 
+func ReturningWrappedMessage() error {
+	err := errors.New("some error")
+	if err != nil {
+		return fooWrap(1, errors.New("new error"), err.Error())
+	}
+
+	return nil
+}
+
 func fooWrap(_ int, err error, _ string) error {
 	return err
 }
