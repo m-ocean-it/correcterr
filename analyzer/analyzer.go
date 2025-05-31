@@ -42,21 +42,21 @@ func run(pass *analysis.Pass) (any, error) {
 			return
 		}
 
-		xIdent, ok := binExpr.X.(*ast.Ident)
+		leftErrVar, ok := binExpr.X.(*ast.Ident)
 		if !ok {
 			return
 		}
 
-		yIdent, ok := binExpr.Y.(*ast.Ident)
+		rightVar, ok := binExpr.Y.(*ast.Ident)
 		if !ok {
 			return
 		}
 
-		if yIdent.Obj != nil {
+		if rightVar.Obj != nil {
 			return
 		}
 
-		if yIdent.Name != "nil" {
+		if rightVar.Name != "nil" {
 			return
 		}
 
@@ -71,13 +71,13 @@ func run(pass *analysis.Pass) (any, error) {
 					continue
 				}
 
-				switch t := res.(type) {
+				switch returnVal := res.(type) {
 				case *ast.Ident:
-					if t.Name != xIdent.Name {
+					if returnVal.Name != leftErrVar.Name {
 						pass.Reportf(retStmt.Pos(), "returning not the error that was checked")
 					}
 				case *ast.CallExpr:
-					returns, callExpectsErr := inspectErrCall(xIdent, t, pass)
+					returns, callExpectsErr := inspectErrCall(leftErrVar, returnVal, pass)
 					if callExpectsErr && !returns {
 						pass.Reportf(retStmt.Pos(), "returning not the error that was checked")
 					}
