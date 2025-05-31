@@ -16,6 +16,61 @@ func CheckingAndReturningDifferentErrors() error {
 	return nil
 }
 
+func CheckingAndReturningDifferentErrorsNoLint() error {
+	var err1 = errors.New("1")
+	var err2 = errors.New("2")
+
+	if err1 != nil {
+		return err2 //nolint
+	}
+
+	return nil
+}
+
+func CheckingAndReturningDifferentErrorsNoLintAll() error {
+	var err1 = errors.New("1")
+	var err2 = errors.New("2")
+
+	if err1 != nil {
+		return err2 //nolint:all
+	}
+
+	return nil
+}
+
+func CheckingAndReturningDifferentErrorsNoLintAllWithSomethingElse() error {
+	var err1 = errors.New("1")
+	var err2 = errors.New("2")
+
+	if err1 != nil {
+		return err2 //nolint: foo,all ,bar
+	}
+
+	return nil
+}
+
+func CheckingAndReturningDifferentErrorsNoLintCorrecterr() error {
+	var err1 = errors.New("1")
+	var err2 = errors.New("2")
+
+	if err1 != nil {
+		return err2 //nolint:correcterr,foo
+	}
+
+	return nil
+}
+
+func CheckingAndReturningDifferentErrorsNoLintNoCorrecterr() error {
+	var err1 = errors.New("1")
+	var err2 = errors.New("2")
+
+	if err1 != nil {
+		return err2 //nolint:foo,bar // want "returning not the error that was checked"
+	}
+
+	return nil
+}
+
 func CheckingAndReturningDifferentErrors2() error {
 	var err1 = errors.New("1")
 	if err2 := errors.New("2"); err2 != nil {

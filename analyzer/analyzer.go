@@ -4,10 +4,19 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
+	"maps"
+	"slices"
+	"strings"
 
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/passes/inspect"
 	"golang.org/x/tools/go/ast/inspector"
+)
+
+const (
+	nolintDirective = "nolint"
+	nolintName      = "correcterr"
+	nolintAll       = "all"
 )
 
 var Analyzer = &analysis.Analyzer{
@@ -19,6 +28,12 @@ var Analyzer = &analysis.Analyzer{
 
 func run(pass *analysis.Pass) (any, error) {
 	inspector := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
+
+	commentMap := make(ast.CommentMap)
+	for _, f := range pass.Files {
+		cmap := ast.NewCommentMap(pass.Fset, f, f.Comments)
+		maps.Copy(commentMap, cmap)
+	}
 
 	nodeFilter := []ast.Node{(*ast.IfStmt)(nil)}
 
@@ -76,6 +91,12 @@ func run(pass *analysis.Pass) (any, error) {
 			retStmt, ok := bodyStmt.(*ast.ReturnStmt)
 			if !ok {
 				continue
+			}
+
+			if retStmtCommentGroup, ok := commentMap[retStmt]; ok {
+				if checkCommentGroupsForNoLint(retStmtCommentGroup) {
+					continue
+				}
 			}
 
 			var (
@@ -214,6 +235,41 @@ func errIdentIsInList(target *ast.Ident, errIdents []*ast.Ident) bool {
 	for _, eID := range errIdents {
 		if eID.Name == target.Name {
 			return true
+		}
+	}
+
+	return false
+}
+
+func checkCommentGroupsForNoLint(commGroups []*ast.CommentGroup) bool {
+	for _, cgroup := range commGroups {
+		for _, comment := range cgroup.List {
+			nolintTrimmed := strings.TrimPrefix(comment.Text, "//"+nolintDirective)
+			if len(nolintTrimmed) == len(comment.Text) {
+				continue
+			}
+
+			if nolintTrimmed == "" {
+				return true
+			}
+
+			colonTrimmed := strings.TrimPrefix(nolintTrimmed, ":")
+			if len(colonTrimmed) == len(nolintTrimmed) {
+				continue
+			}
+
+			nolintList := func() []string {
+				list := strings.Split(colonTrimmed, ",")
+				for i, linterName := range list {
+					list[i] = strings.TrimSpace(linterName)
+				}
+
+				return list
+			}()
+
+			if slices.Contains(nolintList, nolintAll) || slices.Contains(nolintList, nolintName) {
+				return true
+			}
 		}
 	}
 
