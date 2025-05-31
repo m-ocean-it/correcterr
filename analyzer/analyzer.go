@@ -77,26 +77,7 @@ func run(pass *analysis.Pass) (any, error) {
 						pass.Reportf(retStmt.Pos(), "returning not the error that was checked")
 					}
 				case *ast.CallExpr:
-					var returns bool
-					var callExpectsErr bool
-					for _, arg := range t.Args {
-						if !ExprIsError(arg, pass.TypesInfo) {
-							continue
-						}
-
-						callExpectsErr = true
-
-						argIdent, ok := arg.(*ast.Ident)
-						if !ok {
-							continue
-						}
-
-						if argIdent.Name == xIdent.Name {
-							returns = true
-							break
-						}
-					}
-
+					returns, callExpectsErr := inspectErrCall(xIdent, t, pass)
 					if callExpectsErr && !returns {
 						pass.Reportf(retStmt.Pos(), "returning not the error that was checked")
 					}
@@ -106,6 +87,31 @@ func run(pass *analysis.Pass) (any, error) {
 	})
 
 	return nil, nil
+}
+
+func inspectErrCall(leftErrVar *ast.Ident, call *ast.CallExpr, pass *analysis.Pass) (bool, bool) {
+	var returns bool
+	var callExpectsErr bool
+
+	for _, arg := range call.Args {
+		if !ExprIsError(arg, pass.TypesInfo) {
+			continue
+		}
+
+		callExpectsErr = true
+
+		argIdent, ok := arg.(*ast.Ident)
+		if !ok {
+			continue
+		}
+
+		if argIdent.Name == leftErrVar.Name {
+			returns = true
+			break
+		}
+	}
+
+	return returns, callExpectsErr
 }
 
 func ExprIsError(v ast.Expr, info *types.Info) bool {
