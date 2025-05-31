@@ -73,14 +73,17 @@ func run(pass *analysis.Pass) (any, error) {
 
 		RETURN_RESULTS:
 			for _, res := range retStmt.Results {
-				if !(exprIsError(res, pass.TypesInfo) || exprIsString(res, pass.TypesInfo)) {
+				if exprIsError(res, pass.TypesInfo) {
+					callExpectsErr = true
+				} else if !exprIsString(res, pass.TypesInfo) {
 					continue
 				}
 
 				switch returnVal := res.(type) {
 				case *ast.Ident:
-					if returnVal.Name != leftErrVar.Name {
-						pass.Reportf(retStmt.Pos(), "returning not the error that was checked")
+					if returnVal.Name == leftErrVar.Name {
+						returns = true
+						break RETURN_RESULTS
 					}
 				case *ast.CallExpr:
 					rets, expects := inspectErrCall(leftErrVar, returnVal, pass)
