@@ -334,6 +334,16 @@ func CheckTwoErrorsCorrect() error {
 	return nil
 }
 
+func ReturnWrappedErrorMessage() error {
+	err := errors.New("some error")
+
+	if err != nil {
+		return errors.New(fooWrap(1, err, "a").Error())
+	}
+
+	return nil
+}
+
 func fooWrap(_ int, err error, _ string) error {
 	return err
 }

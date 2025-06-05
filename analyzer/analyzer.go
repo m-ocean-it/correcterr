@@ -142,10 +142,8 @@ func run(pass *analysis.Pass) (any, error) {
 }
 
 func inspectErrCall(checkedErrs []*ast.Ident, call *ast.CallExpr, pass *analysis.Pass) (bool, bool) {
-	for _, checkedErr := range checkedErrs {
-		if callIsErrDotErrorOnTarget(call, checkedErr) {
-			return true, false
-		}
+	if callIsErrDotErrorOnTarget(call, checkedErrs, pass.TypesInfo) {
+		return true, false
 	}
 
 	var returns bool
@@ -194,22 +192,43 @@ func exprIsString(v ast.Expr, info *types.Info) bool {
 	return false
 }
 
-func callIsErrDotErrorOnTarget(call *ast.CallExpr, target *ast.Ident) bool {
+func callIsErrDotErrorOnTarget(call *ast.CallExpr, targets []*ast.Ident, typesInfo *types.Info) bool {
 	selExpr, ok := call.Fun.(*ast.SelectorExpr)
 	if !ok || selExpr == nil || selExpr.Sel == nil {
 		return false
 	}
 
-	xIdent, ok := selExpr.X.(*ast.Ident)
-	if !ok || xIdent == nil {
-		return false
+	switch x := selExpr.X.(type) {
+
+	case *ast.Ident:
+		if !(x != nil && selExpr.Sel.Name == "Error" && selExpr.Sel.Obj == nil) {
+			return false
+		}
+
+		for _, targ := range targets {
+			if x.Name == targ.Name {
+				return true
+			}
+		}
+
+	case *ast.CallExpr:
+		if !exprIsError(x, typesInfo) {
+			return false
+		}
+
+		for _, arg := range x.Args {
+			argIdent, _ := arg.(*ast.Ident)
+			if argIdent == nil {
+				continue
+			}
+
+			if errIdentIsInList(argIdent, targets) {
+				return true
+			}
+		}
 	}
 
-	if xIdent.Name != target.Name {
-		return false
-	}
-
-	return selExpr.Sel.Name == "Error" && selExpr.Sel.Obj == nil
+	return false
 }
 
 func scanCallForErrs(call *ast.CallExpr, pass *analysis.Pass) []*ast.Ident {
