@@ -211,6 +211,17 @@ func callIsErrDotErrorOnTarget(call *ast.CallExpr, targets []*ast.Ident, typesIn
 			}
 		}
 
+	case *ast.SelectorExpr:
+		if x == nil || x.Sel == nil {
+			return false
+		}
+
+		for _, targ := range targets {
+			if x.Sel.Name == targ.Name {
+				return true
+			}
+		}
+
 	case *ast.CallExpr:
 		if !exprIsError(x, typesInfo) {
 			return false
@@ -244,6 +255,8 @@ func scanCallForErrs(call *ast.CallExpr, pass *analysis.Pass) []*ast.Ident {
 			errIdents = append(errIdents, typedArg)
 		case *ast.CallExpr:
 			errIdents = append(errIdents, scanCallForErrs(typedArg, pass)...)
+		case *ast.SelectorExpr:
+			errIdents = append(errIdents, typedArg.Sel)
 		}
 	}
 
