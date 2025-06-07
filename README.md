@@ -55,13 +55,15 @@ correcterr ./...  # or specify a package
 All examples below are sufficient to disable a diagnostic on a specific line:
 
 ```go
-//nolint:correcterr
-//nolint:all
 //nolint
+//nolint:correcterr
+//nolint:foo,correcterr,bar
+//nolint:all
 ```
 
 *Make sure to not add a space in front of `nolint`.*
 
 ## Roadmap
 
+- [ ] Maybe, ignore when `errors.New` is used after checking some error 
 - [ ] Pull request to `golangci-lint`
