@@ -119,7 +119,7 @@ func LengthOfSlice() error {
 func NewErrorAfterCheck() error {
 	var err error
 	if err != nil {
-		return errors.New("some new error") // want "returning not the error that was checked"
+		return errors.New("some new error")
 	}
 
 	return nil
@@ -212,6 +212,17 @@ func ReturningWrappedMessage() error {
 	err := errors.New("some error")
 	if err != nil {
 		return fooWrap(1, errors.New("new error"), err.Error())
+	}
+
+	return nil
+}
+
+func ReturningWrappedMessage2() error {
+	err := errors.New("some error")
+	anotherErr := errors.New("another error")
+
+	if err != nil {
+		return fooWrap(1, errors.New("new error"), anotherErr.Error())
 	}
 
 	return nil

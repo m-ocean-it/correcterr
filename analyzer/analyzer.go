@@ -142,6 +142,10 @@ func run(pass *analysis.Pass) (any, error) {
 }
 
 func inspectErrCall(checkedErrs []*ast.Ident, call *ast.CallExpr, pass *analysis.Pass) (bool, bool) {
+	if callIsErrorsNewWithLiteralString(call, pass) {
+		return true, false
+	}
+
 	if callIsErrDotErrorOnTarget(call, checkedErrs, pass.TypesInfo) {
 		return true, false
 	}
@@ -190,6 +194,31 @@ func exprIsString(v ast.Expr, info *types.Info) bool {
 	}
 
 	return false
+}
+
+func callIsErrorsNewWithLiteralString(call *ast.CallExpr, pass *analysis.Pass) bool {
+	if len(call.Args) == 0 {
+		return false
+	}
+	if !exprIsString(call.Args[0], pass.TypesInfo) {
+		return false
+	}
+
+	errorsNewSelectorExpr, _ := call.Fun.(*ast.SelectorExpr)
+	if errorsNewSelectorExpr == nil {
+		return false
+	}
+
+	if errorsNewSelectorExpr.Sel.Name != "New" {
+		return false
+	}
+
+	errorsNewSelectorX, _ := errorsNewSelectorExpr.X.(*ast.Ident)
+	if errorsNewSelectorX == nil || errorsNewSelectorX.Name != "errors" {
+		return false
+	}
+
+	return true
 }
 
 func callIsErrDotErrorOnTarget(call *ast.CallExpr, targets []*ast.Ident, typesInfo *types.Info) bool {
