@@ -162,14 +162,15 @@ func ErrorfWrap2() error {
 	err2 := errors.New("2")
 
 	if err1 != nil {
-		return fmt.Errorf("errors: %w, %w", err1, err2)
+		return fmt.Errorf("errors: %w, %w", err1, err2) // want "returning not the error that was checked"
 	}
 
 	return nil
 }
 
-func Closure() {
+func FuncLit() {
 	var err error
+
 	func() error {
 		if innerErr := errors.New("inner"); innerErr != nil {
 			return err // want "returning not the error that was checked"
@@ -177,6 +178,73 @@ func Closure() {
 
 		return nil
 	}()
+}
+
+func AssignFuncLit() error {
+	var err error
+
+	funcLitErr := func() error {
+		if innerErr := errors.New("inner"); innerErr != nil {
+			return err // want "returning not the error that was checked"
+		}
+
+		return nil
+	}()
+
+	return funcLitErr
+}
+
+func Switch() error {
+	var err error
+
+	switch {
+	case false:
+	case true:
+		if innerErr := errors.New("inner"); innerErr != nil {
+			return err // want "returning not the error that was checked"
+		}
+	}
+
+	return nil
+}
+
+func RangeStmt() error {
+	var err error
+
+	for range 5 {
+		if innerErr := errors.New("inner"); innerErr != nil {
+			return err // want "returning not the error that was checked"
+		}
+	}
+
+	return nil
+}
+
+func ForStmt() error {
+	err := errors.New("error")
+
+	for i := 0; i < 5; i++ {
+		_ = i
+
+		if innerErr := errors.New("inner"); innerErr != nil {
+			return err // want "returning not the error that was checked"
+		}
+	}
+
+	return nil
+}
+
+func NestedIfStatements() error {
+	err := errors.New("error")
+	anotherErr := errors.New("another")
+
+	if true {
+		if err != nil {
+			return anotherErr // want "returning not the error that was checked"
+		}
+	}
+
+	return nil
 }
 
 func DoubleWrap() error {
@@ -197,12 +265,23 @@ func TripleFooWrap() error {
 	return nil
 }
 
+func TripleFooWrapOfWrongError() error {
+	err := errors.New("error")
+	anotherError := errors.New("another")
+
+	if err != nil {
+		return fooWrap(1, fooWrap(2, fooWrap(3, anotherError, "c"), "b"), "a") // want "returning not the error that was checked"
+	}
+
+	return nil
+}
+
 func ReturningMessage() (error, string) {
 	err := errors.New("some error")
 	anotherErr := errors.New("another error")
 
 	if err != nil {
-		return anotherErr, err.Error()
+		return anotherErr, err.Error() // want "returning not the error that was checked"
 	}
 
 	return nil, "foo"
@@ -244,7 +323,7 @@ func ErrorsIsWrong() error {
 
 	wrappedErr := fmt.Errorf("wrapped: %w", err)
 	if errors.Is(wrappedErr, err) {
-		return anotherErr // want "returning not the error that was checked"
+		return anotherErr
 	}
 
 	return nil
@@ -295,7 +374,7 @@ func FooCheckWrong() error {
 	anotherErr := errors.New("another error")
 
 	if fooCheck(1, err, "a") {
-		return anotherErr // want "returning not the error that was checked"
+		return anotherErr
 	}
 
 	return nil
@@ -306,7 +385,7 @@ func FooCheckWrappedWrong() error {
 	anotherErr := errors.New("another error")
 
 	if fooCheck(1, err, "a") {
-		return fmt.Errorf("error: %w", anotherErr) // want "returning not the error that was checked"
+		return fmt.Errorf("error: %w", anotherErr)
 	}
 
 	return nil
@@ -317,7 +396,7 @@ func FooCheckReturnMessageWrong() error {
 	anotherErr := errors.New("another error")
 
 	if fooCheck(1, err, "a") {
-		return fmt.Errorf("error: %s", anotherErr.Error()) // want "returning not the error that was checked"
+		return fmt.Errorf("error: %s", anotherErr.Error())
 	}
 
 	return nil
@@ -362,16 +441,3 @@ func fooWrap(_ int, err error, _ string) error {
 func fooCheck(_ int, err error, _ string) bool {
 	return err != nil
 }
-
-// TODO
-// func CheckTwoErrorsWrong() error {
-// 	err := errors.New("some error")
-// 	anotherErr := errors.New("another error")
-// 	thirdErr := errors.New("third error")
-
-// 	if err != nil && anotherErr != nil {
-// 		return thirdErr // should error
-// 	}
-
-// 	return nil
-// }

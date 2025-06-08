@@ -35,57 +35,44 @@ func run(pass *analysis.Pass) (any, error) {
 		maps.Copy(commentMap, cmap)
 	}
 
-	nodeFilter := []ast.Node{(*ast.IfStmt)(nil)}
+	nodeFilter := []ast.Node{(*ast.FuncDecl)(nil)}
 
 	inspector.Preorder(nodeFilter, func(node ast.Node) {
-		if node == nil {
+		funcNode, _ := node.(*ast.FuncDecl)
+		if funcNode == nil {
 			return
 		}
 
-		ifStmt := node.(*ast.IfStmt)
-
-		var checkedErrVars []*ast.Ident
-
-		switch ifExpr := ifStmt.Cond.(type) {
-		case *ast.BinaryExpr:
-			binExpr := ifExpr
-
-			if binExpr.Op != token.NEQ {
-				return
-			}
-
-			if !exprIsError(binExpr.X, pass.TypesInfo) {
-				return
-			}
-
-			id, ok := binExpr.X.(*ast.Ident)
-			if !ok {
-				return
-			}
-
-			rightVar, ok := binExpr.Y.(*ast.Ident)
-			if !ok {
-				return
-			}
-
-			if rightVar.Obj != nil {
-				return
-			}
-
-			if rightVar.Name != "nil" {
-				return
-			}
-
-			checkedErrVars = append(checkedErrVars, id)
-		case *ast.CallExpr:
-			checkedErrVars = append(checkedErrVars, scanCallForErrs(ifExpr, pass)...)
-		default:
-			return
+		for _, funcBodyElement := range funcNode.Body.List {
+			inspectStatement(pass, funcNode, commentMap, funcBodyElement)
 		}
+	})
 
-		if len(checkedErrVars) == 0 {
-			return
-		}
+	return nil, nil
+}
+
+func inspectStatement(pass *analysis.Pass, funcNode *ast.FuncDecl, commentMap ast.CommentMap, stmt ast.Stmt) {
+	switch s := stmt.(type) {
+	case *ast.IfStmt:
+		inspectIfStmt(pass, funcNode, commentMap, s)
+	case *ast.SwitchStmt:
+		inspectSwitchStmt(pass, funcNode, commentMap, s)
+	case *ast.ForStmt:
+		inspectForStmt(pass, funcNode, commentMap, s)
+	case *ast.RangeStmt:
+		inspectRangeStmt(pass, funcNode, commentMap, s)
+	case *ast.ExprStmt:
+		inspectExprStmt(pass, funcNode, commentMap, s)
+	case *ast.AssignStmt:
+		inspectAssignStmt(pass, funcNode, commentMap, s)
+	}
+}
+
+func inspectIfStmt(pass *analysis.Pass, funcNode *ast.FuncDecl, commentMap ast.CommentMap, ifStmt *ast.IfStmt) {
+	maybeCheckedErr := tryGetCheckedErrFromIfStmt(pass, ifStmt)
+
+	if maybeCheckedErr != nil {
+		checkedError := maybeCheckedErr
 
 		for _, bodyStmt := range ifStmt.Body.List {
 			retStmt, ok := bodyStmt.(*ast.ReturnStmt)
@@ -99,84 +86,208 @@ func run(pass *analysis.Pass) (any, error) {
 				}
 			}
 
-			var (
-				returns        bool
-				callExpectsErr bool
-			)
-
-		RETURN_RESULTS:
+		CHECK_RETURN_RESULTS:
 			for _, res := range retStmt.Results {
-				if exprIsError(res, pass.TypesInfo) {
-					callExpectsErr = true
-				} else if !exprIsString(res, pass.TypesInfo) {
+				if !exprIsError(res, pass.TypesInfo) {
 					continue
 				}
 
+				var toReport bool
+
 				switch returnVal := res.(type) {
+
 				case *ast.Ident:
-					if errIdentIsInList(returnVal, checkedErrVars) {
-						returns = true
-						break RETURN_RESULTS
+					if returnVal.Name != checkedError.Name && errIdentIsDeclaredInFunc(funcNode, returnVal) {
+						toReport = true
 					}
+
 				case *ast.CallExpr:
-					rets, expects := inspectErrCall(checkedErrVars, returnVal, pass)
-					if rets {
-						returns = true
-						break RETURN_RESULTS
-					}
-					if expects {
-						callExpectsErr = true
+					if inspectCall(pass, funcNode, checkedError, returnVal) {
+						toReport = true
 					}
 				}
-			}
 
-			if callExpectsErr && !returns {
-				pass.Reportf(retStmt.Pos(), "returning not the error that was checked")
-			}
+				if toReport {
+					pass.Reportf(retStmt.Pos(), "returning not the error that was checked")
 
-			break
+					break CHECK_RETURN_RESULTS
+				}
+			}
 		}
-	})
+	}
 
-	return nil, nil
+	for _, bodyStmt := range ifStmt.Body.List {
+		inspectStatement(pass, funcNode, commentMap, bodyStmt)
+	}
 }
 
-func inspectErrCall(checkedErrs []*ast.Ident, call *ast.CallExpr, pass *analysis.Pass) (bool, bool) {
-	if callIsErrorsNewWithLiteralString(call, pass) {
-		return true, false
-	}
-
-	if callIsErrDotErrorOnTarget(call, checkedErrs, pass.TypesInfo) {
-		return true, false
-	}
-
-	var returns bool
-	var callExpectsErr bool
-
-LOOP:
-	for _, arg := range call.Args {
-		if exprIsError(arg, pass.TypesInfo) {
-			callExpectsErr = true
-		} else if !exprIsString(arg, pass.TypesInfo) {
+func inspectSwitchStmt(pass *analysis.Pass, funcNode *ast.FuncDecl, commentMap ast.CommentMap, switchStmt *ast.SwitchStmt) {
+	for _, stmt := range switchStmt.Body.List {
+		caseClause, _ := stmt.(*ast.CaseClause)
+		if caseClause == nil {
 			continue
 		}
 
-		switch typedArg := arg.(type) {
+		for _, caseClauseStmt := range caseClause.Body {
+			inspectStatement(pass, funcNode, commentMap, caseClauseStmt)
+		}
+	}
+}
+
+func inspectForStmt(pass *analysis.Pass, funcNode *ast.FuncDecl, commentMap ast.CommentMap, forStmt *ast.ForStmt) {
+	for _, stmt := range forStmt.Body.List {
+		inspectStatement(pass, funcNode, commentMap, stmt)
+	}
+}
+
+func inspectRangeStmt(pass *analysis.Pass, funcNode *ast.FuncDecl, commentMap ast.CommentMap, rangeStmt *ast.RangeStmt) {
+	for _, stmt := range rangeStmt.Body.List {
+		inspectStatement(pass, funcNode, commentMap, stmt)
+	}
+}
+
+func inspectExprStmt(pass *analysis.Pass, funcNode *ast.FuncDecl, commentMap ast.CommentMap, exprStmt *ast.ExprStmt) {
+	inspectExpr(pass, funcNode, commentMap, exprStmt.X)
+}
+
+func inspectExpr(pass *analysis.Pass, funcNode *ast.FuncDecl, commentMap ast.CommentMap, expr ast.Expr) {
+	switch x := expr.(type) {
+	case *ast.CallExpr:
+		inspectCallExpr(pass, funcNode, commentMap, x)
+	}
+}
+
+func inspectCallExpr(pass *analysis.Pass, funcNode *ast.FuncDecl, commentMap ast.CommentMap, callExpr *ast.CallExpr) {
+	funcLit, _ := callExpr.Fun.(*ast.FuncLit)
+	if funcLit == nil {
+		return
+	}
+
+	for _, stmt := range funcLit.Body.List {
+		inspectStatement(pass, funcNode, commentMap, stmt)
+	}
+}
+
+func inspectAssignStmt(pass *analysis.Pass, funcNode *ast.FuncDecl, commentMap ast.CommentMap, assignStmt *ast.AssignStmt) {
+	for _, rightExpr := range assignStmt.Rhs {
+		inspectExpr(pass, funcNode, commentMap, rightExpr)
+	}
+}
+
+func tryGetCheckedErrFromIfStmt(pass *analysis.Pass, ifStmt *ast.IfStmt) *ast.Ident {
+	binaryCondition, _ := ifStmt.Cond.(*ast.BinaryExpr)
+	if binaryCondition == nil {
+		return nil
+	}
+
+	if binaryCondition.Op != token.NEQ {
+		return nil
+	}
+
+	if !exprIsError(binaryCondition.X, pass.TypesInfo) {
+		return nil
+	}
+
+	checkedError, ok := binaryCondition.X.(*ast.Ident)
+	if !ok {
+		return nil
+	}
+
+	rightVar, ok := binaryCondition.Y.(*ast.Ident)
+	if !ok {
+		return nil
+	}
+
+	if rightVar.Obj != nil {
+		return nil
+	}
+
+	if rightVar.Name != "nil" {
+		return nil
+	}
+
+	return checkedError
+}
+
+func inspectCall(pass *analysis.Pass, funcNode *ast.FuncDecl, checkedErr *ast.Ident, call *ast.CallExpr) bool {
+	for _, arg := range call.Args {
+		if !exprIsError(arg, pass.TypesInfo) {
+			continue
+		}
+
+		switch errArg := arg.(type) {
 		case *ast.Ident:
-			if errIdentIsInList(typedArg, checkedErrs) {
-				returns = true
-				break LOOP
+			if errArg.Name != checkedErr.Name && errIdentIsDeclaredInFunc(funcNode, errArg) {
+				return true
 			}
 		case *ast.CallExpr:
-			rets, _ := inspectErrCall(checkedErrs, typedArg, pass)
-			if rets {
-				returns = true
-				break LOOP
+			if inspectCall(pass, funcNode, checkedErr, errArg) {
+				return true
 			}
 		}
 	}
 
-	return returns, callExpectsErr
+	return false
+}
+
+func errIdentIsDeclaredInFunc(funcNode *ast.FuncDecl, errIdent *ast.Ident) bool {
+	for _, stmt := range funcNode.Body.List {
+		switch s := stmt.(type) {
+
+		case *ast.DeclStmt:
+			if declIsErrIdent(s, errIdent) {
+				return true
+			}
+
+		case *ast.AssignStmt:
+			if assignIsErrIdent(s, errIdent) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+func declIsErrIdent(decl *ast.DeclStmt, errIdent *ast.Ident) bool {
+	genDecl, _ := decl.Decl.(*ast.GenDecl)
+	if genDecl == nil {
+		return false
+	}
+
+	if genDecl.Tok != token.VAR {
+		return false
+	}
+
+	for _, spec := range genDecl.Specs {
+		valSpec, _ := spec.(*ast.ValueSpec)
+		if valSpec == nil {
+			continue
+		}
+
+		for _, name := range valSpec.Names {
+			if name.Name == errIdent.Name {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+func assignIsErrIdent(assign *ast.AssignStmt, errIdent *ast.Ident) bool {
+	for _, leftExpr := range assign.Lhs {
+		leftIdent, _ := leftExpr.(*ast.Ident)
+		if leftIdent == nil {
+			continue
+		}
+
+		if leftIdent.Name == errIdent.Name {
+			return true
+		}
+	}
+
+	return false
 }
 
 func exprIsError(v ast.Expr, info *types.Info) bool {
@@ -188,89 +299,7 @@ func exprIsError(v ast.Expr, info *types.Info) bool {
 	return false
 }
 
-func exprIsString(v ast.Expr, info *types.Info) bool {
-	if basicType, ok := info.TypeOf(v).(*types.Basic); ok {
-		return basicType.Name() == "string"
-	}
-
-	return false
-}
-
-func callIsErrorsNewWithLiteralString(call *ast.CallExpr, pass *analysis.Pass) bool {
-	if len(call.Args) == 0 {
-		return false
-	}
-	if !exprIsString(call.Args[0], pass.TypesInfo) {
-		return false
-	}
-
-	errorsNewSelectorExpr, _ := call.Fun.(*ast.SelectorExpr)
-	if errorsNewSelectorExpr == nil {
-		return false
-	}
-
-	if errorsNewSelectorExpr.Sel.Name != "New" {
-		return false
-	}
-
-	errorsNewSelectorX, _ := errorsNewSelectorExpr.X.(*ast.Ident)
-	if errorsNewSelectorX == nil || errorsNewSelectorX.Name != "errors" {
-		return false
-	}
-
-	return true
-}
-
-func callIsErrDotErrorOnTarget(call *ast.CallExpr, targets []*ast.Ident, typesInfo *types.Info) bool {
-	selExpr, ok := call.Fun.(*ast.SelectorExpr)
-	if !ok || selExpr == nil || selExpr.Sel == nil {
-		return false
-	}
-
-	switch x := selExpr.X.(type) {
-
-	case *ast.Ident:
-		if !(x != nil && selExpr.Sel.Name == "Error" && selExpr.Sel.Obj == nil) {
-			return false
-		}
-
-		for _, targ := range targets {
-			if x.Name == targ.Name {
-				return true
-			}
-		}
-
-	case *ast.SelectorExpr:
-		if x == nil || x.Sel == nil {
-			return false
-		}
-
-		for _, targ := range targets {
-			if x.Sel.Name == targ.Name {
-				return true
-			}
-		}
-
-	case *ast.CallExpr:
-		if !exprIsError(x, typesInfo) {
-			return false
-		}
-
-		for _, arg := range x.Args {
-			argIdent, _ := arg.(*ast.Ident)
-			if argIdent == nil {
-				continue
-			}
-
-			if errIdentIsInList(argIdent, targets) {
-				return true
-			}
-		}
-	}
-
-	return false
-}
-
+// TODO: use as an iterator
 func scanCallForErrs(call *ast.CallExpr, pass *analysis.Pass) []*ast.Ident {
 	var errIdents []*ast.Ident
 
@@ -290,16 +319,6 @@ func scanCallForErrs(call *ast.CallExpr, pass *analysis.Pass) []*ast.Ident {
 	}
 
 	return errIdents
-}
-
-func errIdentIsInList(target *ast.Ident, errIdents []*ast.Ident) bool {
-	for _, eID := range errIdents {
-		if eID.Name == target.Name {
-			return true
-		}
-	}
-
-	return false
 }
 
 func checkCommentGroupsForNoLint(commGroups []*ast.CommentGroup) bool {

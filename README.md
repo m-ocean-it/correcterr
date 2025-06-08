@@ -6,6 +6,8 @@ It's a linter that checks whether the returned error is the same one that was ch
 
 ### Examples
 
+#### Will trigger
+
 ```go
 if txErr != nil {
     return err // will be reported
@@ -25,18 +27,27 @@ if err != nil {
 ```
 
 ```go
-if errors.Is(err1, err2) {
-    return anotherErr // will be reported
+if err != nil {
+    return someCustomWrapper(someCustomError(anotherErr)) // will be reported
 }
 ```
 
-*Note: returning the message of the checked error with the `Error`-method is considered "returning" a checked error. For example, this will not be reported:*
+#### Will NOT trigger
 
 ```go
 if err != nil {
-    return fmt.Errorf("error message: %s", err.Error())
+    return errors.New("another") // creating an error on the spot is fine
 }
 ```
+
+```go
+import "custom_errors"
+
+if err != nil {
+    return custom_errors.SomeError // returning an error defined outside of the function's scope is fine
+}
+```
+
 
 ## Installation
 ```sh
@@ -47,7 +58,13 @@ The same command will update the package on your machine.
 
 ## Usage
 ```sh
-correcterr ./...  # or specify a package
+correcterr [-flag] [package]
+```
+
+To run on the whole project:
+
+```sh
+correcterr ./...
 ```
 
 ### The `nolint`-directive is supported
@@ -65,5 +82,4 @@ All examples below are sufficient to disable a diagnostic on a specific line:
 
 ## Roadmap
 
-- [ ] Maybe, ignore when `errors.New` is used after checking some error 
 - [ ] Pull request to `golangci-lint`
