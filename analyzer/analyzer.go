@@ -44,7 +44,7 @@ func run(pass *analysis.Pass) (any, error) {
 		}
 
 		var (
-			localErrNames   = getLocalErrorNames(funcNode.Body.List)
+			localErrNames   = make(map[string]struct{})
 			checkedErrNames = make(map[string]struct{})
 		)
 
