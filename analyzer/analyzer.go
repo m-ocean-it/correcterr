@@ -43,32 +43,94 @@ func run(pass *analysis.Pass) (any, error) {
 			return
 		}
 
+		localErrNames := getLocalErrorNames(funcNode)
+		if len(localErrNames) == 0 {
+			return
+		}
+
 		for _, funcBodyElement := range funcNode.Body.List {
-			inspectStatement(pass, funcNode, commentMap, funcBodyElement)
+			inspectStatement(pass, localErrNames, commentMap, funcBodyElement)
 		}
 	})
 
 	return nil, nil
 }
 
-func inspectStatement(pass *analysis.Pass, funcNode *ast.FuncDecl, commentMap ast.CommentMap, stmt ast.Stmt) {
+func getLocalErrorNames(funcNode *ast.FuncDecl) []string {
+	var names []string
+
+	for _, stmt := range funcNode.Body.List {
+		switch s := stmt.(type) {
+
+		case *ast.DeclStmt:
+			names = append(names, getErrorNamesFromDeclStmt(s)...)
+
+		case *ast.AssignStmt:
+			names = append(names, getErrorNamesFromAssignStmt(s)...)
+		}
+	}
+
+	return names
+}
+
+func getErrorNamesFromDeclStmt(decl *ast.DeclStmt) []string {
+	genDecl, _ := decl.Decl.(*ast.GenDecl)
+	if genDecl == nil {
+		return nil
+	}
+
+	if genDecl.Tok != token.VAR {
+		return nil
+	}
+
+	var names []string
+
+	for _, spec := range genDecl.Specs {
+		valSpec, _ := spec.(*ast.ValueSpec)
+		if valSpec == nil {
+			continue
+		}
+
+		for _, name := range valSpec.Names {
+			names = append(names, name.Name)
+		}
+	}
+
+	return names
+}
+
+func getErrorNamesFromAssignStmt(assign *ast.AssignStmt) []string {
+	var names []string
+
+	for _, leftExpr := range assign.Lhs {
+		leftIdent, _ := leftExpr.(*ast.Ident)
+		if leftIdent != nil {
+			names = append(names, leftIdent.Name)
+		}
+
+	}
+
+	return names
+}
+
+func inspectStatement(pass *analysis.Pass, localErrNames []string, commentMap ast.CommentMap, stmt ast.Stmt) {
 	switch s := stmt.(type) {
 	case *ast.IfStmt:
-		inspectIfStmt(pass, funcNode, commentMap, s)
+		inspectIfStmt(pass, localErrNames, commentMap, s)
 	case *ast.SwitchStmt:
-		inspectSwitchStmt(pass, funcNode, commentMap, s)
+		inspectSwitchStmt(pass, localErrNames, commentMap, s)
 	case *ast.ForStmt:
-		inspectForStmt(pass, funcNode, commentMap, s)
+		inspectForStmt(pass, localErrNames, commentMap, s)
 	case *ast.RangeStmt:
-		inspectRangeStmt(pass, funcNode, commentMap, s)
+		inspectRangeStmt(pass, localErrNames, commentMap, s)
 	case *ast.ExprStmt:
-		inspectExprStmt(pass, funcNode, commentMap, s)
+		inspectExprStmt(pass, localErrNames, commentMap, s)
 	case *ast.AssignStmt:
-		inspectAssignStmt(pass, funcNode, commentMap, s)
+		inspectAssignStmt(pass, localErrNames, commentMap, s)
 	}
 }
 
-func inspectIfStmt(pass *analysis.Pass, funcNode *ast.FuncDecl, commentMap ast.CommentMap, ifStmt *ast.IfStmt) {
+func inspectIfStmt(pass *analysis.Pass, localErrNames []string, commentMap ast.CommentMap, ifStmt *ast.IfStmt) {
 	maybeCheckedErr := tryGetCheckedErrFromIfStmt(pass, ifStmt)
 
 	if maybeCheckedErr != nil {
@@ -97,12 +159,12 @@ func inspectIfStmt(pass *analysis.Pass, funcNode *ast.FuncDecl, commentMap ast.C
 				switch returnVal := res.(type) {
 
 				case *ast.Ident:
-					if returnVal.Name != checkedError.Name && errIdentIsDeclaredInFunc(funcNode, returnVal) {
+					if returnVal.Name != checkedError.Name && slices.Contains(localErrNames, returnVal.Name) {
 						toReport = true
 					}
 
 				case *ast.CallExpr:
-					if inspectCall(pass, funcNode, checkedError, returnVal) {
+					if inspectCall(pass, localErrNames, checkedError, returnVal) {
 						toReport = true
 					}
 				}
@@ -117,11 +179,11 @@ func inspectIfStmt(pass *analysis.Pass, funcNode *ast.FuncDecl, commentMap ast.C
 	}
 
 	for _, bodyStmt := range ifStmt.Body.List {
-		inspectStatement(pass, funcNode, commentMap, bodyStmt)
+		inspectStatement(pass, localErrNames, commentMap, bodyStmt)
 	}
 }
 
-func inspectSwitchStmt(pass *analysis.Pass, funcNode *ast.FuncDecl, commentMap ast.CommentMap, switchStmt *ast.SwitchStmt) {
+func inspectSwitchStmt(pass *analysis.Pass, localErrNames []string, commentMap ast.CommentMap, switchStmt *ast.SwitchStmt) {
 	for _, stmt := range switchStmt.Body.List {
 		caseClause, _ := stmt.(*ast.CaseClause)
 		if caseClause == nil {
@@ -129,48 +191,48 @@ func inspectSwitchStmt(pass *analysis.Pass, funcNode *ast.FuncDecl, commentMap a
 		}
 
 		for _, caseClauseStmt := range caseClause.Body {
-			inspectStatement(pass, funcNode, commentMap, caseClauseStmt)
+			inspectStatement(pass, localErrNames, commentMap, caseClauseStmt)
 		}
 	}
 }
 
-func inspectForStmt(pass *analysis.Pass, funcNode *ast.FuncDecl, commentMap ast.CommentMap, forStmt *ast.ForStmt) {
+func inspectForStmt(pass *analysis.Pass, localErrNames []string, commentMap ast.CommentMap, forStmt *ast.ForStmt) {
 	for _, stmt := range forStmt.Body.List {
-		inspectStatement(pass, funcNode, commentMap, stmt)
+		inspectStatement(pass, localErrNames, commentMap, stmt)
 	}
 }
 
-func inspectRangeStmt(pass *analysis.Pass, funcNode *ast.FuncDecl, commentMap ast.CommentMap, rangeStmt *ast.RangeStmt) {
+func inspectRangeStmt(pass *analysis.Pass, localErrNames []string, commentMap ast.CommentMap, rangeStmt *ast.RangeStmt) {
 	for _, stmt := range rangeStmt.Body.List {
-		inspectStatement(pass, funcNode, commentMap, stmt)
+		inspectStatement(pass, localErrNames, commentMap, stmt)
 	}
 }
 
-func inspectExprStmt(pass *analysis.Pass, funcNode *ast.FuncDecl, commentMap ast.CommentMap, exprStmt *ast.ExprStmt) {
-	inspectExpr(pass, funcNode, commentMap, exprStmt.X)
+func inspectExprStmt(pass *analysis.Pass, localErrNames []string, commentMap ast.CommentMap, exprStmt *ast.ExprStmt) {
+	inspectExpr(pass, localErrNames, commentMap, exprStmt.X)
 }
 
-func inspectExpr(pass *analysis.Pass, funcNode *ast.FuncDecl, commentMap ast.CommentMap, expr ast.Expr) {
+func inspectExpr(pass *analysis.Pass, localErrNames []string, commentMap ast.CommentMap, expr ast.Expr) {
 	switch x := expr.(type) {
 	case *ast.CallExpr:
-		inspectCallExpr(pass, funcNode, commentMap, x)
+		inspectCallExpr(pass, localErrNames, commentMap, x)
 	}
 }
 
-func inspectCallExpr(pass *analysis.Pass, funcNode *ast.FuncDecl, commentMap ast.CommentMap, callExpr *ast.CallExpr) {
+func inspectCallExpr(pass *analysis.Pass, localErrNames []string, commentMap ast.CommentMap, callExpr *ast.CallExpr) {
 	funcLit, _ := callExpr.Fun.(*ast.FuncLit)
 	if funcLit == nil {
 		return
 	}
 
 	for _, stmt := range funcLit.Body.List {
-		inspectStatement(pass, funcNode, commentMap, stmt)
+		inspectStatement(pass, localErrNames, commentMap, stmt)
 	}
 }
 
-func inspectAssignStmt(pass *analysis.Pass, funcNode *ast.FuncDecl, commentMap ast.CommentMap, assignStmt *ast.AssignStmt) {
+func inspectAssignStmt(pass *analysis.Pass, localErrNames []string, commentMap ast.CommentMap, assignStmt *ast.AssignStmt) {
 	for _, rightExpr := range assignStmt.Rhs {
-		inspectExpr(pass, funcNode, commentMap, rightExpr)
+		inspectExpr(pass, localErrNames, commentMap, rightExpr)
 	}
 }
 
@@ -209,7 +271,7 @@ func tryGetCheckedErrFromIfStmt(pass *analysis.Pass, ifStmt *ast.IfStmt) *ast.Id
 	return checkedError
 }
 
-func inspectCall(pass *analysis.Pass, funcNode *ast.FuncDecl, checkedErr *ast.Ident, call *ast.CallExpr) bool {
+func inspectCall(pass *analysis.Pass, localErrNames []string, checkedErr *ast.Ident, call *ast.CallExpr) bool {
 	for _, arg := range call.Args {
 		if !exprIsError(arg, pass.TypesInfo) {
 			continue
@@ -217,73 +279,13 @@ func inspectCall(pass *analysis.Pass, funcNode *ast.FuncDecl, checkedErr *ast.Id
 
 		switch errArg := arg.(type) {
 		case *ast.Ident:
-			if errArg.Name != checkedErr.Name && errIdentIsDeclaredInFunc(funcNode, errArg) {
+			if errArg.Name != checkedErr.Name && slices.Contains(localErrNames, errArg.Name) {
 				return true
 			}
 		case *ast.CallExpr:
-			if inspectCall(pass, funcNode, checkedErr, errArg) {
+			if inspectCall(pass, localErrNames, checkedErr, errArg) {
 				return true
 			}
-		}
-	}
-
-	return false
-}
-
-func errIdentIsDeclaredInFunc(funcNode *ast.FuncDecl, errIdent *ast.Ident) bool {
-	for _, stmt := range funcNode.Body.List {
-		switch s := stmt.(type) {
-
-		case *ast.DeclStmt:
-			if declIsErrIdent(s, errIdent) {
-				return true
-			}
-
-		case *ast.AssignStmt:
-			if assignIsErrIdent(s, errIdent) {
-				return true
-			}
-		}
-	}
-
-	return false
-}
-
-func declIsErrIdent(decl *ast.DeclStmt, errIdent *ast.Ident) bool {
-	genDecl, _ := decl.Decl.(*ast.GenDecl)
-	if genDecl == nil {
-		return false
-	}
-
-	if genDecl.Tok != token.VAR {
-		return false
-	}
-
-	for _, spec := range genDecl.Specs {
-		valSpec, _ := spec.(*ast.ValueSpec)
-		if valSpec == nil {
-			continue
-		}
-
-		for _, name := range valSpec.Names {
-			if name.Name == errIdent.Name {
-				return true
-			}
-		}
-	}
-
-	return false
-}
-
-func assignIsErrIdent(assign *ast.AssignStmt, errIdent *ast.Ident) bool {
-	for _, leftExpr := range assign.Lhs {
-		leftIdent, _ := leftExpr.(*ast.Ident)
-		if leftIdent == nil {
-			continue
-		}
-
-		if leftIdent.Name == errIdent.Name {
-			return true
 		}
 	}
 
@@ -297,28 +299,6 @@ func exprIsError(v ast.Expr, info *types.Info) bool {
 	}
 
 	return false
-}
-
-// TODO: use as an iterator
-func scanCallForErrs(call *ast.CallExpr, pass *analysis.Pass) []*ast.Ident {
-	var errIdents []*ast.Ident
-
-	for _, arg := range call.Args {
-		if !exprIsError(arg, pass.TypesInfo) {
-			continue
-		}
-
-		switch typedArg := arg.(type) {
-		case *ast.Ident:
-			errIdents = append(errIdents, typedArg)
-		case *ast.CallExpr:
-			errIdents = append(errIdents, scanCallForErrs(typedArg, pass)...)
-		case *ast.SelectorExpr:
-			errIdents = append(errIdents, typedArg.Sel)
-		}
-	}
-
-	return errIdents
 }
 
 func checkCommentGroupsForNoLint(commGroups []*ast.CommentGroup) bool {
