@@ -43,12 +43,12 @@ func run(pass *analysis.Pass) (any, error) {
 			return
 		}
 
-		localErrNames := getLocalErrorNames(funcNode.Body.List)
-		if len(localErrNames) == 0 {
-			return
-		}
+		var (
+			localErrNames   = getLocalErrorNames(funcNode.Body.List)
+			checkedErrNames = make(map[string]struct{})
+		)
 
-		inspectStatements(pass, localErrNames, make(map[string]struct{}), commentMap, funcNode.Body.List)
+		inspectStatements(pass, localErrNames, checkedErrNames, commentMap, funcNode.Body.List)
 	})
 
 	return nil, nil

@@ -554,6 +554,19 @@ func ClosureInDeclaration() error {
 	return err
 }
 
+func NoInitialLocalErrNames() {
+	closureWrapper(func() error {
+		innerErr := errors.New("inner")
+		anotherInnerErr := errors.New("another")
+
+		if innerErr != nil {
+			return anotherInnerErr // want "returning not the error that was checked"
+		}
+
+		return nil
+	})
+}
+
 func closureWrapper(fn func() error) error {
 	return fn()
 }
