@@ -475,6 +475,36 @@ func ClosureErrors() error {
 	return err
 }
 
+func ClosureReturnsOutsideDefinedError() error {
+	funcErr := errors.New("func error")
+	anotherFuncErr := errors.New("another func error")
+
+	err := closureWrapper(func() error {
+		if funcErr != nil {
+			return anotherFuncErr // want "returning not the error that was checked"
+		}
+
+		return nil
+	})
+
+	return err
+}
+
+func ClosureReturnsInsideDefinedError() error {
+	err := closureWrapper(func() error {
+		innerErr := errors.New("inner")
+		anotherInnerErr := errors.New("another inner")
+
+		if innerErr != nil {
+			return anotherInnerErr // want "returning not the error that was checked"
+		}
+
+		return nil
+	})
+
+	return err
+}
+
 func closureWrapper(fn func() error) error {
 	return fn()
 }
