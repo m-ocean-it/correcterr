@@ -217,15 +217,29 @@ func inspectExpr(pass *analysis.Pass, localErrNames, checkedErrNames []string, c
 	switch x := expr.(type) {
 	case *ast.CallExpr:
 		inspectCallExpr(pass, localErrNames, checkedErrNames, commentMap, x)
+	case *ast.FuncLit:
+		inspectFuncLit(pass, localErrNames, checkedErrNames, commentMap, x)
 	}
 }
 
 func inspectCallExpr(pass *analysis.Pass, localErrNames, checkedErrNames []string, commentMap ast.CommentMap, callExpr *ast.CallExpr) {
 	funcLit, _ := callExpr.Fun.(*ast.FuncLit)
-	if funcLit == nil {
-		return
+	if funcLit != nil {
+		inspectFuncLit(pass, localErrNames, checkedErrNames, commentMap, funcLit)
 	}
 
+	for _, arg := range callExpr.Args {
+		inspectExpr(pass, localErrNames, checkedErrNames, commentMap, arg)
+	}
+}
+
+func inspectFuncLit(
+	pass *analysis.Pass,
+	localErrNames,
+	checkedErrNames []string,
+	commentMap ast.CommentMap,
+	funcLit *ast.FuncLit,
+) {
 	for _, stmt := range funcLit.Body.List {
 		inspectStatement(pass, localErrNames, checkedErrNames, commentMap, stmt)
 	}

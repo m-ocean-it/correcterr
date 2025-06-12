@@ -458,10 +458,35 @@ func ErrorCheckedInOuterIfStatement() error {
 	return nil
 }
 
+func ClosureErrors() error {
+	err := closureWrapper(func() error {
+		_, err := doSmth()
+		if err != nil {
+			return fooWrap(1, err, "a")
+		}
+
+		if _, innerErr := doSmth(); innerErr != nil {
+			return fooWrap(1, err, "a") // want "returning not the error that was checked"
+		}
+
+		return nil
+	})
+
+	return err
+}
+
+func closureWrapper(fn func() error) error {
+	return fn()
+}
+
 func fooWrap(_ int, err error, _ string) error {
 	return err
 }
 
 func fooCheck(_ int, err error, _ string) bool {
 	return err != nil
+}
+
+func doSmth() (int, error) {
+	return 0, errors.New("doSmth failed")
 }
