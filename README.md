@@ -6,6 +6,8 @@ It's a linter that checks whether the returned error is the same one that was ch
 
 ### Examples
 
+For more examples, see the `err_mistakes.go` file which is used in automated testing.
+
 #### Will trigger
 
 ```go
