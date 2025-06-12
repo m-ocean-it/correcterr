@@ -144,6 +144,8 @@ func inspectStatement(
 		inspectExprStmt(pass, localErrNames, checkedErrorNames, commentMap, s)
 	case *ast.AssignStmt:
 		inspectAssignStmt(pass, localErrNames, checkedErrorNames, commentMap, s)
+	case *ast.DeclStmt:
+		inspectDeclStmt(pass, localErrNames, checkedErrorNames, commentMap, s)
 	case *ast.ReturnStmt:
 		inspectReturnStmt(pass, localErrNames, checkedErrorNames, commentMap, s)
 	}
@@ -223,6 +225,34 @@ func inspectAssignStmt(
 	}
 }
 
+func inspectDeclStmt(
+	pass *analysis.Pass,
+	localErrNames,
+	checkedErrNames []string,
+	commentMap ast.CommentMap,
+	declStmt *ast.DeclStmt,
+) {
+	genDecl, _ := declStmt.Decl.(*ast.GenDecl)
+	if genDecl == nil {
+		return
+	}
+
+	if genDecl.Tok != token.VAR {
+		return
+	}
+
+	for _, spec := range genDecl.Specs {
+		valSpec, _ := spec.(*ast.ValueSpec)
+		if valSpec == nil {
+			continue
+		}
+
+		for _, expr := range valSpec.Values {
+			inspectExpr(pass, localErrNames, checkedErrNames, commentMap, expr)
+		}
+	}
+}
+
 func inspectReturnStmt(
 	pass *analysis.Pass,
 	localErrNames,
@@ -266,8 +296,6 @@ func inspectReturnStmt(
 		}
 	}
 }
-
-// TODO inspectDeclStmt
 
 func tryGetCheckedErrFromIfStmt(pass *analysis.Pass, ifStmt *ast.IfStmt) *ast.Ident {
 	binaryCondition, _ := ifStmt.Cond.(*ast.BinaryExpr)

@@ -475,7 +475,7 @@ func ClosureErrors() error {
 	return err
 }
 
-func ClosureReturnsOutsideDefinedError() error {
+func ClosureReturnsErrorAssignedOutside() error {
 	funcErr := errors.New("func error")
 	anotherFuncErr := errors.New("another func error")
 
@@ -490,10 +490,59 @@ func ClosureReturnsOutsideDefinedError() error {
 	return err
 }
 
-func ClosureReturnsInsideDefinedError() error {
+func ClosureReturnsErrorAssignedInside() error {
 	err := closureWrapper(func() error {
 		innerErr := errors.New("inner")
 		anotherInnerErr := errors.New("another inner")
+
+		if innerErr != nil {
+			return anotherInnerErr // want "returning not the error that was checked"
+		}
+
+		return nil
+	})
+
+	return err
+}
+
+func ClosureReturnsErrorDeclaredOutside() error {
+	var (
+		innerErr        = errors.New("inner")
+		anotherInnerErr = errors.New("another inner")
+	)
+
+	err := closureWrapper(func() error {
+		if innerErr != nil {
+			return anotherInnerErr // want "returning not the error that was checked"
+		}
+
+		return nil
+	})
+
+	return err
+}
+
+func ClosureReturnsErrorDeclaredInside() error {
+	err := closureWrapper(func() error {
+		var (
+			innerErr        = errors.New("inner")
+			anotherInnerErr = errors.New("another inner")
+		)
+
+		if innerErr != nil {
+			return anotherInnerErr // want "returning not the error that was checked"
+		}
+
+		return nil
+	})
+
+	return err
+}
+
+func ClosureInDeclaration() error {
+	var err = closureWrapper(func() error {
+		innerErr := errors.New("inner")
+		anotherInnerErr := errors.New("another")
 
 		if innerErr != nil {
 			return anotherInnerErr // want "returning not the error that was checked"
