@@ -48,7 +48,7 @@ func run(pass *analysis.Pass) (any, error) {
 		var (
 			localErrNames   = make(stringSet)
 			checkedErrNames = make(stringSet)
-			wraps           = make(map[string][]string)
+			wraps           = make(map[string]stringSet)
 		)
 
 		inspectStatements(pass, localErrNames, checkedErrNames, wraps, commentMap, funcNode.Body.List)
@@ -57,14 +57,14 @@ func run(pass *analysis.Pass) (any, error) {
 	return nil, nil
 }
 
-func getLocalErrorNames(statements []ast.Stmt, pass *analysis.Pass) (stringSet, map[string][]string) {
+func getLocalErrorNames(statements []ast.Stmt, pass *analysis.Pass) (stringSet, map[string]stringSet) {
 	names := make(stringSet)
-	wraps := make(map[string][]string)
+	wraps := make(map[string]stringSet)
 
 	for _, stmt := range statements {
 		var (
 			nms  []string
-			wrps map[string][]string
+			wrps map[string]stringSet
 		)
 
 		switch s := stmt.(type) {
@@ -78,14 +78,18 @@ func getLocalErrorNames(statements []ast.Stmt, pass *analysis.Pass) (stringSet, 
 			names[nm] = struct{}{}
 		}
 		for k, v := range wrps {
-			wraps[k] = append(wraps[k], v...)
+			if wraps[k] == nil {
+				wraps[k] = v
+			} else {
+				maps.Copy(wraps[k], v)
+			}
 		}
 	}
 
 	return names, wraps
 }
 
-func getErrorNamesFromDeclStmt(pass *analysis.Pass, decl *ast.DeclStmt) ([]string, map[string][]string) {
+func getErrorNamesFromDeclStmt(pass *analysis.Pass, decl *ast.DeclStmt) ([]string, map[string]stringSet) {
 	genDecl, _ := decl.Decl.(*ast.GenDecl)
 	if genDecl == nil {
 		return nil, nil
@@ -97,7 +101,7 @@ func getErrorNamesFromDeclStmt(pass *analysis.Pass, decl *ast.DeclStmt) ([]strin
 
 	var (
 		names []string
-		wraps = make(map[string][]string)
+		wraps = make(map[string]stringSet)
 	)
 
 	for _, spec := range genDecl.Specs {
@@ -121,7 +125,13 @@ func getErrorNamesFromDeclStmt(pass *analysis.Pass, decl *ast.DeclStmt) ([]strin
 		}
 		if len(callErrNames) > 0 {
 			for _, name := range valSpec.Names {
-				wraps[name.Name] = append(wraps[name.Name], callErrNames...)
+				for _, callErrN := range callErrNames {
+					if wraps[name.Name] == nil {
+						wraps[name.Name] = stringSet{callErrN: struct{}{}}
+					} else {
+						wraps[name.Name][callErrN] = struct{}{}
+					}
+				}
 			}
 		}
 	}
@@ -129,10 +139,10 @@ func getErrorNamesFromDeclStmt(pass *analysis.Pass, decl *ast.DeclStmt) ([]strin
 	return names, wraps
 }
 
-func getErrorNamesFromAssignStmt(pass *analysis.Pass, assign *ast.AssignStmt) ([]string, map[string][]string) {
+func getErrorNamesFromAssignStmt(pass *analysis.Pass, assign *ast.AssignStmt) ([]string, map[string]stringSet) {
 	var (
 		names []string
-		wraps = make(map[string][]string)
+		wraps = make(map[string]stringSet)
 	)
 
 	for _, leftExpr := range assign.Lhs {
@@ -153,7 +163,13 @@ func getErrorNamesFromAssignStmt(pass *analysis.Pass, assign *ast.AssignStmt) ([
 	}
 	if len(callErrNames) > 0 {
 		for _, errName := range names {
-			wraps[errName] = callErrNames
+			for _, callErrN := range callErrNames {
+				if wraps[errName] == nil {
+					wraps[errName] = stringSet{callErrN: struct{}{}}
+				} else {
+					wraps[errName][callErrN] = struct{}{}
+				}
+			}
 		}
 	}
 
@@ -184,7 +200,7 @@ func scanCallForErrNames(call *ast.CallExpr, pass *analysis.Pass) []string {
 func inspectStatements(
 	pass *analysis.Pass,
 	localErrNames, checkedErrorNames stringSet,
-	wraps map[string][]string, // TODO: change values to map
+	wraps map[string]stringSet,
 	commentMap ast.CommentMap,
 	statements []ast.Stmt,
 ) {
@@ -193,9 +209,13 @@ func inspectStatements(
 		localErrNames = maps.Clone(localErrNames)
 		maps.Copy(localErrNames, newLocalErrNames)
 
-		wraps = maps.Clone(wraps)
+		wraps = cloneStringToStringSetMap(wraps)
 		for k, v := range newWraps {
-			wraps[k] = append(wraps[k], v...)
+			if wraps[k] == nil {
+				wraps[k] = v
+			} else {
+				maps.Copy(wraps[k], v)
+			}
 		}
 	}
 
@@ -207,7 +227,7 @@ func inspectStatements(
 func inspectStatement(
 	pass *analysis.Pass,
 	localErrNames, checkedErrorNames stringSet,
-	wraps map[string][]string,
+	wraps map[string]stringSet,
 	commentMap ast.CommentMap,
 	stmt ast.Stmt,
 ) {
@@ -234,7 +254,7 @@ func inspectStatement(
 func inspectIfStmt(
 	pass *analysis.Pass,
 	localErrNames, checkedErrNames stringSet,
-	wraps map[string][]string,
+	wraps map[string]stringSet,
 	commentMap ast.CommentMap,
 	ifStmt *ast.IfStmt,
 ) {
@@ -250,7 +270,7 @@ func inspectIfStmt(
 func inspectSwitchStmt(
 	pass *analysis.Pass,
 	localErrNames, checkedErrNames stringSet,
-	wraps map[string][]string,
+	wraps map[string]stringSet,
 	commentMap ast.CommentMap,
 	switchStmt *ast.SwitchStmt,
 ) {
@@ -267,7 +287,7 @@ func inspectSwitchStmt(
 func inspectForStmt(
 	pass *analysis.Pass,
 	localErrNames, checkedErrNames stringSet,
-	wraps map[string][]string,
+	wraps map[string]stringSet,
 	commentMap ast.CommentMap,
 	forStmt *ast.ForStmt,
 ) {
@@ -277,7 +297,7 @@ func inspectForStmt(
 func inspectRangeStmt(
 	pass *analysis.Pass,
 	localErrNames, checkedErrNames stringSet,
-	wraps map[string][]string,
+	wraps map[string]stringSet,
 	commentMap ast.CommentMap,
 	rangeStmt *ast.RangeStmt,
 ) {
@@ -287,7 +307,7 @@ func inspectRangeStmt(
 func inspectExprStmt(
 	pass *analysis.Pass,
 	localErrNames, checkedErrNames stringSet,
-	wraps map[string][]string,
+	wraps map[string]stringSet,
 	commentMap ast.CommentMap,
 	exprStmt *ast.ExprStmt,
 ) {
@@ -297,7 +317,7 @@ func inspectExprStmt(
 func inspectExpr(
 	pass *analysis.Pass,
 	localErrNames, checkedErrNames stringSet,
-	wraps map[string][]string,
+	wraps map[string]stringSet,
 	commentMap ast.CommentMap,
 	expr ast.Expr,
 ) {
@@ -312,7 +332,7 @@ func inspectExpr(
 func inspectCallExpr(
 	pass *analysis.Pass,
 	localErrNames, checkedErrNames stringSet,
-	wraps map[string][]string,
+	wraps map[string]stringSet,
 	commentMap ast.CommentMap,
 	callExpr *ast.CallExpr,
 ) {
@@ -329,7 +349,7 @@ func inspectCallExpr(
 func inspectFuncLit(
 	pass *analysis.Pass,
 	localErrNames, checkedErrNames stringSet,
-	wraps map[string][]string,
+	wraps map[string]stringSet,
 	commentMap ast.CommentMap,
 	funcLit *ast.FuncLit,
 ) {
@@ -339,7 +359,7 @@ func inspectFuncLit(
 func inspectAssignStmt(
 	pass *analysis.Pass,
 	localErrNames, checkedErrNames stringSet,
-	wraps map[string][]string,
+	wraps map[string]stringSet,
 	commentMap ast.CommentMap,
 	assignStmt *ast.AssignStmt,
 ) {
@@ -351,7 +371,7 @@ func inspectAssignStmt(
 func inspectDeclStmt(
 	pass *analysis.Pass,
 	localErrNames, checkedErrNames stringSet,
-	wraps map[string][]string,
+	wraps map[string]stringSet,
 	commentMap ast.CommentMap,
 	declStmt *ast.DeclStmt,
 ) {
@@ -379,7 +399,7 @@ func inspectDeclStmt(
 func inspectReturnStmt(
 	pass *analysis.Pass,
 	localErrNames, checkedErrNames stringSet,
-	wraps map[string][]string,
+	wraps map[string]stringSet,
 	commentMap ast.CommentMap,
 	retStmt *ast.ReturnStmt,
 ) {
@@ -455,7 +475,7 @@ func tryGetCheckedErrFromIfStmt(pass *analysis.Pass, ifStmt *ast.IfStmt) *ast.Id
 func inspectCall(
 	pass *analysis.Pass,
 	localErrNames, checkedErrNames stringSet,
-	wraps map[string][]string,
+	wraps map[string]stringSet,
 	call *ast.CallExpr,
 ) bool {
 	for _, arg := range call.Args {
@@ -481,7 +501,7 @@ func inspectCall(
 func returnedErrIsFine(
 	errName string,
 	localErrNames, checkedErrNames stringSet,
-	wraps map[string][]string,
+	wraps map[string]stringSet,
 ) bool {
 	if len(checkedErrNames) == 0 {
 		return true
@@ -493,7 +513,7 @@ func returnedErrIsFine(
 func returnedErrIsFineInner(
 	errName string,
 	localErrNames, checkedErrNames stringSet,
-	wraps map[string][]string,
+	wraps map[string]stringSet,
 	alreadyChecked stringSet,
 ) bool {
 	if _, ok := alreadyChecked[errName]; ok {
@@ -516,7 +536,7 @@ func returnedErrIsFineInner(
 		return false
 	}
 
-	for _, wrName := range wrappedNames {
+	for wrName := range wrappedNames {
 		if returnedErrIsFineInner(wrName, localErrNames, checkedErrNames, wraps, alreadyChecked) {
 			return true
 		}
@@ -567,4 +587,15 @@ func checkCommentGroupsForNoLint(commGroups []*ast.CommentGroup) bool {
 	}
 
 	return false
+}
+
+func cloneStringToStringSetMap(m map[string]stringSet) map[string]stringSet {
+	newM := make(map[string]stringSet)
+
+	for k, v := range m {
+		newM[k] = maps.Clone(v)
+	}
+
+	return newM
+
 }
