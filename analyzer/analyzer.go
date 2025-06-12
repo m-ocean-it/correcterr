@@ -26,6 +26,8 @@ var Analyzer = &analysis.Analyzer{
 	Requires: []*analysis.Analyzer{inspect.Analyzer},
 }
 
+type stringSet = map[string]struct{}
+
 func run(pass *analysis.Pass) (any, error) {
 	inspector := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
 
@@ -44,8 +46,8 @@ func run(pass *analysis.Pass) (any, error) {
 		}
 
 		var (
-			localErrNames   = make(map[string]struct{})
-			checkedErrNames = make(map[string]struct{})
+			localErrNames   = make(stringSet)
+			checkedErrNames = make(stringSet)
 			wraps           = make(map[string][]string)
 		)
 
@@ -55,8 +57,8 @@ func run(pass *analysis.Pass) (any, error) {
 	return nil, nil
 }
 
-func getLocalErrorNames(statements []ast.Stmt, pass *analysis.Pass) (map[string]struct{}, map[string][]string) {
-	names := make(map[string]struct{})
+func getLocalErrorNames(statements []ast.Stmt, pass *analysis.Pass) (stringSet, map[string][]string) {
+	names := make(stringSet)
 	wraps := make(map[string][]string)
 
 	for _, stmt := range statements {
@@ -181,7 +183,7 @@ func scanCallForErrNames(call *ast.CallExpr, pass *analysis.Pass) []string {
 
 func inspectStatements(
 	pass *analysis.Pass,
-	localErrNames, checkedErrorNames map[string]struct{},
+	localErrNames, checkedErrorNames stringSet,
 	wraps map[string][]string, // TODO: change values to map
 	commentMap ast.CommentMap,
 	statements []ast.Stmt,
@@ -204,7 +206,7 @@ func inspectStatements(
 
 func inspectStatement(
 	pass *analysis.Pass,
-	localErrNames, checkedErrorNames map[string]struct{},
+	localErrNames, checkedErrorNames stringSet,
 	wraps map[string][]string,
 	commentMap ast.CommentMap,
 	stmt ast.Stmt,
@@ -231,7 +233,7 @@ func inspectStatement(
 
 func inspectIfStmt(
 	pass *analysis.Pass,
-	localErrNames, checkedErrNames map[string]struct{},
+	localErrNames, checkedErrNames stringSet,
 	wraps map[string][]string,
 	commentMap ast.CommentMap,
 	ifStmt *ast.IfStmt,
@@ -247,7 +249,7 @@ func inspectIfStmt(
 
 func inspectSwitchStmt(
 	pass *analysis.Pass,
-	localErrNames, checkedErrNames map[string]struct{},
+	localErrNames, checkedErrNames stringSet,
 	wraps map[string][]string,
 	commentMap ast.CommentMap,
 	switchStmt *ast.SwitchStmt,
@@ -264,7 +266,7 @@ func inspectSwitchStmt(
 
 func inspectForStmt(
 	pass *analysis.Pass,
-	localErrNames, checkedErrNames map[string]struct{},
+	localErrNames, checkedErrNames stringSet,
 	wraps map[string][]string,
 	commentMap ast.CommentMap,
 	forStmt *ast.ForStmt,
@@ -274,7 +276,7 @@ func inspectForStmt(
 
 func inspectRangeStmt(
 	pass *analysis.Pass,
-	localErrNames, checkedErrNames map[string]struct{},
+	localErrNames, checkedErrNames stringSet,
 	wraps map[string][]string,
 	commentMap ast.CommentMap,
 	rangeStmt *ast.RangeStmt,
@@ -284,7 +286,7 @@ func inspectRangeStmt(
 
 func inspectExprStmt(
 	pass *analysis.Pass,
-	localErrNames, checkedErrNames map[string]struct{},
+	localErrNames, checkedErrNames stringSet,
 	wraps map[string][]string,
 	commentMap ast.CommentMap,
 	exprStmt *ast.ExprStmt,
@@ -294,7 +296,7 @@ func inspectExprStmt(
 
 func inspectExpr(
 	pass *analysis.Pass,
-	localErrNames, checkedErrNames map[string]struct{},
+	localErrNames, checkedErrNames stringSet,
 	wraps map[string][]string,
 	commentMap ast.CommentMap,
 	expr ast.Expr,
@@ -309,7 +311,7 @@ func inspectExpr(
 
 func inspectCallExpr(
 	pass *analysis.Pass,
-	localErrNames, checkedErrNames map[string]struct{},
+	localErrNames, checkedErrNames stringSet,
 	wraps map[string][]string,
 	commentMap ast.CommentMap,
 	callExpr *ast.CallExpr,
@@ -326,7 +328,7 @@ func inspectCallExpr(
 
 func inspectFuncLit(
 	pass *analysis.Pass,
-	localErrNames, checkedErrNames map[string]struct{},
+	localErrNames, checkedErrNames stringSet,
 	wraps map[string][]string,
 	commentMap ast.CommentMap,
 	funcLit *ast.FuncLit,
@@ -336,7 +338,7 @@ func inspectFuncLit(
 
 func inspectAssignStmt(
 	pass *analysis.Pass,
-	localErrNames, checkedErrNames map[string]struct{},
+	localErrNames, checkedErrNames stringSet,
 	wraps map[string][]string,
 	commentMap ast.CommentMap,
 	assignStmt *ast.AssignStmt,
@@ -348,7 +350,7 @@ func inspectAssignStmt(
 
 func inspectDeclStmt(
 	pass *analysis.Pass,
-	localErrNames, checkedErrNames map[string]struct{},
+	localErrNames, checkedErrNames stringSet,
 	wraps map[string][]string,
 	commentMap ast.CommentMap,
 	declStmt *ast.DeclStmt,
@@ -376,7 +378,7 @@ func inspectDeclStmt(
 
 func inspectReturnStmt(
 	pass *analysis.Pass,
-	localErrNames, checkedErrNames map[string]struct{},
+	localErrNames, checkedErrNames stringSet,
 	wraps map[string][]string,
 	commentMap ast.CommentMap,
 	retStmt *ast.ReturnStmt,
@@ -452,7 +454,7 @@ func tryGetCheckedErrFromIfStmt(pass *analysis.Pass, ifStmt *ast.IfStmt) *ast.Id
 
 func inspectCall(
 	pass *analysis.Pass,
-	localErrNames, checkedErrNames map[string]struct{},
+	localErrNames, checkedErrNames stringSet,
 	wraps map[string][]string,
 	call *ast.CallExpr,
 ) bool {
@@ -478,21 +480,21 @@ func inspectCall(
 
 func returnedErrIsFine(
 	errName string,
-	localErrNames, checkedErrNames map[string]struct{},
+	localErrNames, checkedErrNames stringSet,
 	wraps map[string][]string,
 ) bool {
 	if len(checkedErrNames) == 0 {
 		return true
 	}
 
-	return returnedErrIsFineInner(errName, localErrNames, checkedErrNames, wraps, make(map[string]struct{}))
+	return returnedErrIsFineInner(errName, localErrNames, checkedErrNames, wraps, make(stringSet))
 }
 
 func returnedErrIsFineInner(
 	errName string,
-	localErrNames, checkedErrNames map[string]struct{},
+	localErrNames, checkedErrNames stringSet,
 	wraps map[string][]string,
-	alreadyChecked map[string]struct{},
+	alreadyChecked stringSet,
 ) bool {
 	if _, ok := alreadyChecked[errName]; ok {
 		return false
