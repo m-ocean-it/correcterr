@@ -434,6 +434,30 @@ func ReturnWrappedErrorMessage() error {
 	return nil
 }
 
+func ReturnWrappedErrorMessage2() error {
+	err := errors.New("some error")
+	anotherErr := errors.New("another error")
+
+	if err != nil {
+		return errors.New(fooWrap(1, anotherErr, "a").Error())
+	}
+
+	return nil
+}
+
+func ErrorCheckedInOuterIfStatement() error {
+	err := errors.New("some error")
+	anotherErr := errors.New("another error")
+
+	if err != nil {
+		if anotherErr != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func fooWrap(_ int, err error, _ string) error {
 	return err
 }
