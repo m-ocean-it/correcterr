@@ -567,6 +567,28 @@ func NoInitialLocalErrNames() {
 	})
 }
 
+func WrappingWithAssignmentBeforeReturning() error {
+	err := errors.New("error")
+	if err != nil {
+		wrappedErr := fmt.Errorf("wrapped: %w", err)
+
+		return wrappedErr
+	}
+
+	return nil
+}
+
+func WrappingWithDeclarationBeforeReturning() error {
+	err := errors.New("error")
+	if err != nil {
+		var wrappedErr error = fmt.Errorf("wrapped: %w", err)
+
+		return wrappedErr
+	}
+
+	return nil
+}
+
 func closureWrapper(fn func() error) error {
 	return fn()
 }
