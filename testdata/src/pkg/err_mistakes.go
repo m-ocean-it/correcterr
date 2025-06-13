@@ -5,56 +5,15 @@ import (
 	"fmt"
 )
 
+// ----------------------------------------------------
+// Triggers
+
 func CheckingAndReturningDifferentErrors() error {
 	var err1 = errors.New("1")
 	var err2 = errors.New("2")
 
 	if err1 != nil {
 		return err2 // want "returning not the error that was checked"
-	}
-
-	return nil
-}
-
-func CheckingAndReturningDifferentErrorsNoLint() error {
-	var err1 = errors.New("1")
-	var err2 = errors.New("2")
-
-	if err1 != nil {
-		return err2 //nolint
-	}
-
-	return nil
-}
-
-func CheckingAndReturningDifferentErrorsNoLintAll() error {
-	var err1 = errors.New("1")
-	var err2 = errors.New("2")
-
-	if err1 != nil {
-		return err2 //nolint:all
-	}
-
-	return nil
-}
-
-func CheckingAndReturningDifferentErrorsNoLintAllWithSomethingElse() error {
-	var err1 = errors.New("1")
-	var err2 = errors.New("2")
-
-	if err1 != nil {
-		return err2 //nolint: foo,all ,bar
-	}
-
-	return nil
-}
-
-func CheckingAndReturningDifferentErrorsNoLintCorrecterr() error {
-	var err1 = errors.New("1")
-	var err2 = errors.New("2")
-
-	if err1 != nil {
-		return err2 //nolint:correcterr,foo
 	}
 
 	return nil
@@ -75,72 +34,6 @@ func CheckingAndReturningDifferentErrors2() error {
 	var err1 = errors.New("1")
 	if err2 := errors.New("2"); err2 != nil {
 		return err1 // want "returning not the error that was checked"
-	}
-
-	return nil
-}
-
-func Correct() error {
-	var err1 = errors.New("1")
-	var err2 = errors.New("2")
-
-	if err1 != nil {
-		return err1
-	}
-
-	if err2 != nil {
-		return err2
-	}
-
-	return nil
-}
-
-func NilError() error {
-	var someError error
-	var anotherError error
-
-	if someError == nil {
-		return anotherError
-	}
-
-	return nil
-}
-
-func LengthOfSlice() error {
-	var slice []int
-	err := errors.New("empty")
-	if len(slice) == 0 {
-		return err
-	}
-
-	return nil
-}
-
-func NewErrorAfterCheck() error {
-	var err error
-	if err != nil {
-		return errors.New("some new error")
-	}
-
-	return nil
-}
-
-func IfTrue() error {
-	var err error
-	if true {
-		return err
-	}
-
-	return nil
-}
-
-func CompareNumbers() error {
-	a := 2
-	b := 3
-	var err error
-
-	if a != b {
-		return err
 	}
 
 	return nil
@@ -247,24 +140,6 @@ func NestedIfStatements() error {
 	return nil
 }
 
-func DoubleWrap() error {
-	var err error
-	if err != nil {
-		return fmt.Errorf("error: %w", fmt.Errorf("error: %w", err))
-	}
-
-	return nil
-}
-
-func TripleFooWrap() error {
-	var err error
-	if err != nil {
-		return fooWrap(1, fooWrap(2, fooWrap(3, err, "c"), "b"), "a")
-	}
-
-	return nil
-}
-
 func TripleFooWrapOfWrongError() error {
 	err := errors.New("error")
 	anotherError := errors.New("another")
@@ -285,6 +160,264 @@ func ReturningMessage() (error, string) {
 	}
 
 	return nil, "foo"
+}
+
+func ClosureErrors() error {
+	err := closureWrapper(func() error {
+		_, err := doSmth()
+		if err != nil {
+			return fooWrap(1, err, "a")
+		}
+
+		if _, innerErr := doSmth(); innerErr != nil {
+			return fooWrap(1, err, "a") // want "returning not the error that was checked"
+		}
+
+		return nil
+	})
+
+	return err
+}
+
+func ClosureReturnsErrorAssignedOutside() error {
+	funcErr := errors.New("func error")
+	anotherFuncErr := errors.New("another func error")
+
+	err := closureWrapper(func() error {
+		if funcErr != nil {
+			return anotherFuncErr // want "returning not the error that was checked"
+		}
+
+		return nil
+	})
+
+	return err
+}
+
+func ClosureReturnsErrorAssignedInside() error {
+	err := closureWrapper(func() error {
+		innerErr := errors.New("inner")
+		anotherInnerErr := errors.New("another inner")
+
+		if innerErr != nil {
+			return anotherInnerErr // want "returning not the error that was checked"
+		}
+
+		return nil
+	})
+
+	return err
+}
+
+func ClosureReturnsErrorDeclaredOutside() error {
+	var (
+		innerErr        = errors.New("inner")
+		anotherInnerErr = errors.New("another inner")
+	)
+
+	err := closureWrapper(func() error {
+		if innerErr != nil {
+			return anotherInnerErr // want "returning not the error that was checked"
+		}
+
+		return nil
+	})
+
+	return err
+}
+
+func ClosureReturnsErrorDeclaredInside() error {
+	err := closureWrapper(func() error {
+		var (
+			innerErr        = errors.New("inner")
+			anotherInnerErr = errors.New("another inner")
+		)
+
+		if innerErr != nil {
+			return anotherInnerErr // want "returning not the error that was checked"
+		}
+
+		return nil
+	})
+
+	return err
+}
+
+func ClosureInDeclaration() error {
+	var err = closureWrapper(func() error {
+		innerErr := errors.New("inner")
+		anotherInnerErr := errors.New("another")
+
+		if innerErr != nil {
+			return anotherInnerErr // want "returning not the error that was checked"
+		}
+
+		return nil
+	})
+
+	return err
+}
+
+func NoInitialLocalErrNames() {
+	closureWrapper(func() error {
+		innerErr := errors.New("inner")
+		anotherInnerErr := errors.New("another")
+
+		if innerErr != nil {
+			return anotherInnerErr // want "returning not the error that was checked"
+		}
+
+		return nil
+	})
+}
+
+func WrapCycle() error {
+	err := errors.New("error")
+	if err != nil {
+		var wrappedB error
+		wrappedA := fmt.Errorf("wrapped: %w", wrappedB)
+		wrappedB = fmt.Errorf("wrapped: %w", wrappedA)
+		wrappedB = fmt.Errorf("wrapped: %w", wrappedA)
+		wrappedA = fmt.Errorf("wrapped: %w", wrappedB)
+
+		return wrappedB // want "returning not the error that was checked"
+	}
+
+	return nil
+}
+
+// ----------------------------------------------------
+// Suppressed triggers
+
+func CheckingAndReturningDifferentErrorsNoLint() error {
+	var err1 = errors.New("1")
+	var err2 = errors.New("2")
+
+	if err1 != nil {
+		return err2 //nolint
+	}
+
+	return nil
+}
+
+func CheckingAndReturningDifferentErrorsNoLintAll() error {
+	var err1 = errors.New("1")
+	var err2 = errors.New("2")
+
+	if err1 != nil {
+		return err2 //nolint:all
+	}
+
+	return nil
+}
+
+func CheckingAndReturningDifferentErrorsNoLintAllWithSomethingElse() error {
+	var err1 = errors.New("1")
+	var err2 = errors.New("2")
+
+	if err1 != nil {
+		return err2 //nolint: foo,all ,bar
+	}
+
+	return nil
+}
+
+func CheckingAndReturningDifferentErrorsNoLintCorrecterr() error {
+	var err1 = errors.New("1")
+	var err2 = errors.New("2")
+
+	if err1 != nil {
+		return err2 //nolint:correcterr,foo
+	}
+
+	return nil
+}
+
+// ----------------------------------------------------
+// Non-triggers
+
+func Correct() error {
+	var err1 = errors.New("1")
+	var err2 = errors.New("2")
+
+	if err1 != nil {
+		return err1
+	}
+
+	if err2 != nil {
+		return err2
+	}
+
+	return nil
+}
+
+func NilError() error {
+	var someError error
+	var anotherError error
+
+	if someError == nil {
+		return anotherError
+	}
+
+	return nil
+}
+
+func LengthOfSlice() error {
+	var slice []int
+	err := errors.New("empty")
+	if len(slice) == 0 {
+		return err
+	}
+
+	return nil
+}
+
+func NewErrorAfterCheck() error {
+	var err error
+	if err != nil {
+		return errors.New("some new error")
+	}
+
+	return nil
+}
+
+func IfTrue() error {
+	var err error
+	if true {
+		return err
+	}
+
+	return nil
+}
+
+func CompareNumbers() error {
+	a := 2
+	b := 3
+	var err error
+
+	if a != b {
+		return err
+	}
+
+	return nil
+}
+
+func DoubleWrap() error {
+	var err error
+	if err != nil {
+		return fmt.Errorf("error: %w", fmt.Errorf("error: %w", err))
+	}
+
+	return nil
+}
+
+func TripleFooWrap() error {
+	var err error
+	if err != nil {
+		return fooWrap(1, fooWrap(2, fooWrap(3, err, "c"), "b"), "a")
+	}
+
+	return nil
 }
 
 func ReturningWrappedMessage() error {
@@ -458,115 +591,6 @@ func ErrorCheckedInOuterIfStatement() error {
 	return nil
 }
 
-func ClosureErrors() error {
-	err := closureWrapper(func() error {
-		_, err := doSmth()
-		if err != nil {
-			return fooWrap(1, err, "a")
-		}
-
-		if _, innerErr := doSmth(); innerErr != nil {
-			return fooWrap(1, err, "a") // want "returning not the error that was checked"
-		}
-
-		return nil
-	})
-
-	return err
-}
-
-func ClosureReturnsErrorAssignedOutside() error {
-	funcErr := errors.New("func error")
-	anotherFuncErr := errors.New("another func error")
-
-	err := closureWrapper(func() error {
-		if funcErr != nil {
-			return anotherFuncErr // want "returning not the error that was checked"
-		}
-
-		return nil
-	})
-
-	return err
-}
-
-func ClosureReturnsErrorAssignedInside() error {
-	err := closureWrapper(func() error {
-		innerErr := errors.New("inner")
-		anotherInnerErr := errors.New("another inner")
-
-		if innerErr != nil {
-			return anotherInnerErr // want "returning not the error that was checked"
-		}
-
-		return nil
-	})
-
-	return err
-}
-
-func ClosureReturnsErrorDeclaredOutside() error {
-	var (
-		innerErr        = errors.New("inner")
-		anotherInnerErr = errors.New("another inner")
-	)
-
-	err := closureWrapper(func() error {
-		if innerErr != nil {
-			return anotherInnerErr // want "returning not the error that was checked"
-		}
-
-		return nil
-	})
-
-	return err
-}
-
-func ClosureReturnsErrorDeclaredInside() error {
-	err := closureWrapper(func() error {
-		var (
-			innerErr        = errors.New("inner")
-			anotherInnerErr = errors.New("another inner")
-		)
-
-		if innerErr != nil {
-			return anotherInnerErr // want "returning not the error that was checked"
-		}
-
-		return nil
-	})
-
-	return err
-}
-
-func ClosureInDeclaration() error {
-	var err = closureWrapper(func() error {
-		innerErr := errors.New("inner")
-		anotherInnerErr := errors.New("another")
-
-		if innerErr != nil {
-			return anotherInnerErr // want "returning not the error that was checked"
-		}
-
-		return nil
-	})
-
-	return err
-}
-
-func NoInitialLocalErrNames() {
-	closureWrapper(func() error {
-		innerErr := errors.New("inner")
-		anotherInnerErr := errors.New("another")
-
-		if innerErr != nil {
-			return anotherInnerErr // want "returning not the error that was checked"
-		}
-
-		return nil
-	})
-}
-
 func WrappingWithAssignmentBeforeReturning() error {
 	err := errors.New("error")
 	if err != nil {
@@ -589,20 +613,8 @@ func WrappingWithDeclarationBeforeReturning() error {
 	return nil
 }
 
-func WrapCycle() error {
-	err := errors.New("error")
-	if err != nil {
-		var wrappedB error
-		wrappedA := fmt.Errorf("wrapped: %w", wrappedB)
-		wrappedB = fmt.Errorf("wrapped: %w", wrappedA)
-		wrappedB = fmt.Errorf("wrapped: %w", wrappedA)
-		wrappedA = fmt.Errorf("wrapped: %w", wrappedB)
-
-		return wrappedB // want "returning not the error that was checked"
-	}
-
-	return nil
-}
+// ----------------------------------------------------
+// Helpers
 
 func closureWrapper(fn func() error) error {
 	return fn()
