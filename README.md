@@ -53,7 +53,7 @@ if err != nil {
 
 ## Installation
 ```sh
-go install github.com/m-ocean-it/correcterr@latest
+go install github.com/m-ocean-it/correcterr/cmd/correcterr@latest
 ```
 
 The same command will update the package on your machine.
