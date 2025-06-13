@@ -36,8 +36,9 @@ type state struct {
 }
 
 type errorNames struct {
-	funcScope stringSet
-	checked   stringSet
+	funcScope      stringSet
+	immediateScope stringSet
+	checked        stringSet
 }
 
 func run(pass *analysis.Pass) (any, error) {
@@ -60,8 +61,9 @@ func run(pass *analysis.Pass) (any, error) {
 		st := state{
 			pass: pass,
 			errNames: errorNames{
-				funcScope: make(stringSet),
-				checked:   make(stringSet),
+				funcScope:      make(stringSet),
+				checked:        make(stringSet),
+				immediateScope: make(stringSet),
 			},
 			wraps:      make(map[string]stringSet),
 			commentMap: commentMap,
@@ -238,6 +240,7 @@ func inspectStatements(st state, statements []ast.Stmt) {
 			}
 		}
 	}
+	st.errNames.immediateScope = newLocalErrNames
 
 	for _, stmt := range statements {
 		inspectStatement(st, stmt)
@@ -460,6 +463,10 @@ func returnedErrIsFineInner(st state, errName string, alreadyChecked stringSet) 
 	}
 
 	if _, ok := st.errNames.funcScope[errName]; !ok {
+		return true
+	}
+
+	if _, ok := st.errNames.immediateScope[errName]; ok {
 		return true
 	}
 
