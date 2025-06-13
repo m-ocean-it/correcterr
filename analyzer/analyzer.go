@@ -28,6 +28,18 @@ var Analyzer = &analysis.Analyzer{
 
 type stringSet = map[string]struct{}
 
+type state struct {
+	pass       *analysis.Pass
+	errNames   errorNames
+	wraps      map[string]stringSet
+	commentMap ast.CommentMap
+}
+
+type errorNames struct {
+	funcScope stringSet
+	checked   stringSet
+}
+
 func run(pass *analysis.Pass) (any, error) {
 	inspector := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
 
@@ -45,13 +57,17 @@ func run(pass *analysis.Pass) (any, error) {
 			return
 		}
 
-		var (
-			localErrNames   = make(stringSet)
-			checkedErrNames = make(stringSet)
-			wraps           = make(map[string]stringSet)
-		)
+		st := state{
+			pass: pass,
+			errNames: errorNames{
+				funcScope: make(stringSet),
+				checked:   make(stringSet),
+			},
+			wraps:      make(map[string]stringSet),
+			commentMap: commentMap,
+		}
 
-		inspectStatements(pass, localErrNames, checkedErrNames, wraps, commentMap, funcNode.Body.List)
+		inspectStatements(st, funcNode.Body.List)
 	})
 
 	return nil, nil
@@ -207,184 +223,112 @@ func scanCallForErrNames(call *ast.CallExpr, pass *analysis.Pass) []string {
 	return errNames
 }
 
-func inspectStatements(
-	pass *analysis.Pass,
-	localErrNames, checkedErrorNames stringSet,
-	wraps map[string]stringSet,
-	commentMap ast.CommentMap,
-	statements []ast.Stmt,
-) {
-	newLocalErrNames, newWraps := getLocalErrorNames(statements, pass)
+func inspectStatements(st state, statements []ast.Stmt) {
+	newLocalErrNames, newWraps := getLocalErrorNames(statements, st.pass)
 	if len(newLocalErrNames) > 0 {
-		localErrNames = maps.Clone(localErrNames)
-		maps.Copy(localErrNames, newLocalErrNames)
+		st.errNames.funcScope = maps.Clone(st.errNames.funcScope)
+		maps.Copy(st.errNames.funcScope, newLocalErrNames)
 
-		wraps = cloneStringToStringSetMap(wraps)
+		st.wraps = cloneStringToStringSetMap(st.wraps)
 		for k, v := range newWraps {
-			if wraps[k] == nil {
-				wraps[k] = v
+			if st.wraps[k] == nil {
+				st.wraps[k] = v
 			} else {
-				maps.Copy(wraps[k], v)
+				maps.Copy(st.wraps[k], v)
 			}
 		}
 	}
 
 	for _, stmt := range statements {
-		inspectStatement(pass, localErrNames, checkedErrorNames, wraps, commentMap, stmt)
+		inspectStatement(st, stmt)
 	}
 }
 
-func inspectStatement(
-	pass *analysis.Pass,
-	localErrNames, checkedErrorNames stringSet,
-	wraps map[string]stringSet,
-	commentMap ast.CommentMap,
-	stmt ast.Stmt,
-) {
+func inspectStatement(st state, stmt ast.Stmt) {
 	switch s := stmt.(type) {
 	case *ast.IfStmt:
-		inspectIfStmt(pass, localErrNames, checkedErrorNames, wraps, commentMap, s)
+		inspectIfStmt(st, s)
 	case *ast.SwitchStmt:
-		inspectSwitchStmt(pass, localErrNames, checkedErrorNames, wraps, commentMap, s)
+		inspectSwitchStmt(st, s)
 	case *ast.ForStmt:
-		inspectForStmt(pass, localErrNames, checkedErrorNames, wraps, commentMap, s)
+		inspectForStmt(st, s)
 	case *ast.RangeStmt:
-		inspectRangeStmt(pass, localErrNames, checkedErrorNames, wraps, commentMap, s)
+		inspectRangeStmt(st, s)
 	case *ast.ExprStmt:
-		inspectExprStmt(pass, localErrNames, checkedErrorNames, wraps, commentMap, s)
+		inspectExprStmt(st, s)
 	case *ast.AssignStmt:
-		inspectAssignStmt(pass, localErrNames, checkedErrorNames, wraps, commentMap, s)
+		inspectAssignStmt(st, s)
 	case *ast.DeclStmt:
-		inspectDeclStmt(pass, localErrNames, checkedErrorNames, wraps, commentMap, s)
+		inspectDeclStmt(st, s)
 	case *ast.ReturnStmt:
-		inspectReturnStmt(pass, localErrNames, checkedErrorNames, wraps, commentMap, s)
+		inspectReturnStmt(st, s)
 	}
 }
 
-func inspectIfStmt(
-	pass *analysis.Pass,
-	localErrNames, checkedErrNames stringSet,
-	wraps map[string]stringSet,
-	commentMap ast.CommentMap,
-	ifStmt *ast.IfStmt,
-) {
-	maybeCheckedErr := tryGetCheckedErrFromIfStmt(pass, ifStmt)
+func inspectIfStmt(st state, ifStmt *ast.IfStmt) {
+	maybeCheckedErr := tryGetCheckedErrFromIfStmt(st.pass, ifStmt)
 	if maybeCheckedErr != nil {
-		checkedErrNames = maps.Clone(checkedErrNames)
-		checkedErrNames[maybeCheckedErr.Name] = struct{}{}
+		st.errNames.checked = maps.Clone(st.errNames.checked)
+		st.errNames.checked[maybeCheckedErr.Name] = struct{}{}
 	}
 
-	inspectStatements(pass, localErrNames, checkedErrNames, wraps, commentMap, ifStmt.Body.List)
+	inspectStatements(st, ifStmt.Body.List)
 }
 
-func inspectSwitchStmt(
-	pass *analysis.Pass,
-	localErrNames, checkedErrNames stringSet,
-	wraps map[string]stringSet,
-	commentMap ast.CommentMap,
-	switchStmt *ast.SwitchStmt,
-) {
+func inspectSwitchStmt(st state, switchStmt *ast.SwitchStmt) {
 	for _, stmt := range switchStmt.Body.List {
 		caseClause, _ := stmt.(*ast.CaseClause)
 		if caseClause == nil {
 			continue
 		}
 
-		inspectStatements(pass, localErrNames, checkedErrNames, wraps, commentMap, caseClause.Body)
+		inspectStatements(st, caseClause.Body)
 	}
 }
 
-func inspectForStmt(
-	pass *analysis.Pass,
-	localErrNames, checkedErrNames stringSet,
-	wraps map[string]stringSet,
-	commentMap ast.CommentMap,
-	forStmt *ast.ForStmt,
-) {
-	inspectStatements(pass, localErrNames, checkedErrNames, wraps, commentMap, forStmt.Body.List)
+func inspectForStmt(st state, forStmt *ast.ForStmt) {
+	inspectStatements(st, forStmt.Body.List)
 }
 
-func inspectRangeStmt(
-	pass *analysis.Pass,
-	localErrNames, checkedErrNames stringSet,
-	wraps map[string]stringSet,
-	commentMap ast.CommentMap,
-	rangeStmt *ast.RangeStmt,
-) {
-	inspectStatements(pass, localErrNames, checkedErrNames, wraps, commentMap, rangeStmt.Body.List)
+func inspectRangeStmt(st state, rangeStmt *ast.RangeStmt) {
+	inspectStatements(st, rangeStmt.Body.List)
 }
 
-func inspectExprStmt(
-	pass *analysis.Pass,
-	localErrNames, checkedErrNames stringSet,
-	wraps map[string]stringSet,
-	commentMap ast.CommentMap,
-	exprStmt *ast.ExprStmt,
-) {
-	inspectExpr(pass, localErrNames, checkedErrNames, wraps, commentMap, exprStmt.X)
+func inspectExprStmt(st state, exprStmt *ast.ExprStmt) {
+	inspectExpr(st, exprStmt.X)
 }
 
-func inspectExpr(
-	pass *analysis.Pass,
-	localErrNames, checkedErrNames stringSet,
-	wraps map[string]stringSet,
-	commentMap ast.CommentMap,
-	expr ast.Expr,
-) {
+func inspectExpr(st state, expr ast.Expr) {
 	switch x := expr.(type) {
 	case *ast.CallExpr:
-		inspectCallExpr(pass, localErrNames, checkedErrNames, wraps, commentMap, x)
+		inspectCallExpr(st, x)
 	case *ast.FuncLit:
-		inspectFuncLit(pass, localErrNames, checkedErrNames, wraps, commentMap, x)
+		inspectFuncLit(st, x)
 	}
 }
 
-func inspectCallExpr(
-	pass *analysis.Pass,
-	localErrNames, checkedErrNames stringSet,
-	wraps map[string]stringSet,
-	commentMap ast.CommentMap,
-	callExpr *ast.CallExpr,
-) {
+func inspectCallExpr(st state, callExpr *ast.CallExpr) {
 	funcLit, _ := callExpr.Fun.(*ast.FuncLit)
 	if funcLit != nil {
-		inspectFuncLit(pass, localErrNames, checkedErrNames, wraps, commentMap, funcLit)
+		inspectFuncLit(st, funcLit)
 	}
 
 	for _, arg := range callExpr.Args {
-		inspectExpr(pass, localErrNames, checkedErrNames, wraps, commentMap, arg)
+		inspectExpr(st, arg)
 	}
 }
 
-func inspectFuncLit(
-	pass *analysis.Pass,
-	localErrNames, checkedErrNames stringSet,
-	wraps map[string]stringSet,
-	commentMap ast.CommentMap,
-	funcLit *ast.FuncLit,
-) {
-	inspectStatements(pass, localErrNames, checkedErrNames, wraps, commentMap, funcLit.Body.List)
+func inspectFuncLit(st state, funcLit *ast.FuncLit) {
+	inspectStatements(st, funcLit.Body.List)
 }
 
-func inspectAssignStmt(
-	pass *analysis.Pass,
-	localErrNames, checkedErrNames stringSet,
-	wraps map[string]stringSet,
-	commentMap ast.CommentMap,
-	assignStmt *ast.AssignStmt,
-) {
+func inspectAssignStmt(st state, assignStmt *ast.AssignStmt) {
 	for _, rightExpr := range assignStmt.Rhs {
-		inspectExpr(pass, localErrNames, checkedErrNames, wraps, commentMap, rightExpr)
+		inspectExpr(st, rightExpr)
 	}
 }
 
-func inspectDeclStmt(
-	pass *analysis.Pass,
-	localErrNames, checkedErrNames stringSet,
-	wraps map[string]stringSet,
-	commentMap ast.CommentMap,
-	declStmt *ast.DeclStmt,
-) {
+func inspectDeclStmt(st state, declStmt *ast.DeclStmt) {
 	genDecl, _ := declStmt.Decl.(*ast.GenDecl)
 	if genDecl == nil {
 		return
@@ -401,26 +345,20 @@ func inspectDeclStmt(
 		}
 
 		for _, expr := range valSpec.Values {
-			inspectExpr(pass, localErrNames, checkedErrNames, wraps, commentMap, expr)
+			inspectExpr(st, expr)
 		}
 	}
 }
 
-func inspectReturnStmt(
-	pass *analysis.Pass,
-	localErrNames, checkedErrNames stringSet,
-	wraps map[string]stringSet,
-	commentMap ast.CommentMap,
-	retStmt *ast.ReturnStmt,
-) {
-	if retStmtCommentGroup, ok := commentMap[retStmt]; ok {
+func inspectReturnStmt(st state, retStmt *ast.ReturnStmt) {
+	if retStmtCommentGroup, ok := st.commentMap[retStmt]; ok {
 		if checkCommentGroupsForNoLint(retStmtCommentGroup) {
 			return
 		}
 	}
 
 	for _, res := range retStmt.Results {
-		if !exprIsError(res, pass.TypesInfo) {
+		if !exprIsError(res, st.pass.TypesInfo) {
 			continue
 		}
 
@@ -429,18 +367,18 @@ func inspectReturnStmt(
 		switch returnVal := res.(type) {
 
 		case *ast.Ident:
-			if !returnedErrIsFine(returnVal.Name, localErrNames, checkedErrNames, wraps) {
+			if !returnedErrIsFine(st, returnVal.Name) {
 				toReport = true
 			}
 
 		case *ast.CallExpr:
-			if inspectCall(pass, localErrNames, checkedErrNames, wraps, returnVal) {
+			if inspectCall(st, returnVal) {
 				toReport = true
 			}
 		}
 
 		if toReport {
-			pass.Reportf(retStmt.Pos(), "returning not the error that was checked")
+			st.pass.Reportf(retStmt.Pos(), "returning not the error that was checked")
 
 			return
 		}
@@ -482,24 +420,19 @@ func tryGetCheckedErrFromIfStmt(pass *analysis.Pass, ifStmt *ast.IfStmt) *ast.Id
 	return checkedError
 }
 
-func inspectCall(
-	pass *analysis.Pass,
-	localErrNames, checkedErrNames stringSet,
-	wraps map[string]stringSet,
-	call *ast.CallExpr,
-) bool {
+func inspectCall(st state, call *ast.CallExpr) bool {
 	for _, arg := range call.Args {
-		if !exprIsError(arg, pass.TypesInfo) {
+		if !exprIsError(arg, st.pass.TypesInfo) {
 			continue
 		}
 
 		switch errArg := arg.(type) {
 		case *ast.Ident:
-			if !returnedErrIsFine(errArg.Name, localErrNames, checkedErrNames, wraps) {
+			if !returnedErrIsFine(st, errArg.Name) {
 				return true
 			}
 		case *ast.CallExpr:
-			if inspectCall(pass, localErrNames, checkedErrNames, wraps, errArg) {
+			if inspectCall(st, errArg) {
 				return true
 			}
 		}
@@ -508,46 +441,38 @@ func inspectCall(
 	return false
 }
 
-func returnedErrIsFine(
-	errName string,
-	localErrNames, checkedErrNames stringSet,
-	wraps map[string]stringSet,
+func returnedErrIsFine(st state, errName string,
 ) bool {
-	if len(checkedErrNames) == 0 {
+	if len(st.errNames.checked) == 0 {
 		return true
 	}
 
-	return returnedErrIsFineInner(errName, localErrNames, checkedErrNames, wraps, make(stringSet))
+	return returnedErrIsFineInner(st, errName, make(stringSet))
 }
 
-func returnedErrIsFineInner(
-	errName string,
-	localErrNames, checkedErrNames stringSet,
-	wraps map[string]stringSet,
-	alreadyChecked stringSet,
-) bool {
+func returnedErrIsFineInner(st state, errName string, alreadyChecked stringSet) bool {
 	if _, ok := alreadyChecked[errName]; ok {
 		return false
 	}
 
-	if _, ok := checkedErrNames[errName]; ok {
+	if _, ok := st.errNames.checked[errName]; ok {
 		return true
 	}
 
-	if _, ok := localErrNames[errName]; !ok {
+	if _, ok := st.errNames.funcScope[errName]; !ok {
 		return true
 	}
 
 	alreadyChecked = maps.Clone(alreadyChecked)
 	alreadyChecked[errName] = struct{}{}
 
-	wrappedNames, ok := wraps[errName]
+	wrappedNames, ok := st.wraps[errName]
 	if !ok {
 		return false
 	}
 
 	for wrName := range wrappedNames {
-		if returnedErrIsFineInner(wrName, localErrNames, checkedErrNames, wraps, alreadyChecked) {
+		if returnedErrIsFineInner(st, wrName, alreadyChecked) {
 			return true
 		}
 	}
