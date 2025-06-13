@@ -116,12 +116,14 @@ func getErrorNamesFromDeclStmt(pass *analysis.Pass, decl *ast.DeclStmt) ([]strin
 
 		var callErrNames []string
 		for _, expr := range valSpec.Values {
-			callExpr, _ := expr.(*ast.CallExpr)
-			if callExpr == nil {
-				continue
+			switch e := expr.(type) {
+			case *ast.CallExpr:
+				callErrNames = append(callErrNames, scanCallForErrNames(e, pass)...)
+			case *ast.Ident:
+				if exprIsError(e, pass.TypesInfo) {
+					callErrNames = append(callErrNames, e.Name)
+				}
 			}
-
-			callErrNames = append(callErrNames, scanCallForErrNames(callExpr, pass)...)
 		}
 		if len(callErrNames) > 0 {
 			for _, name := range valSpec.Names {
@@ -140,10 +142,7 @@ func getErrorNamesFromDeclStmt(pass *analysis.Pass, decl *ast.DeclStmt) ([]strin
 }
 
 func getErrorNamesFromAssignStmt(pass *analysis.Pass, assign *ast.AssignStmt) ([]string, map[string]stringSet) {
-	var (
-		names []string
-		wraps = make(map[string]stringSet)
-	)
+	var names []string
 
 	for _, leftExpr := range assign.Lhs {
 		leftIdent, _ := leftExpr.(*ast.Ident)
@@ -152,18 +151,29 @@ func getErrorNamesFromAssignStmt(pass *analysis.Pass, assign *ast.AssignStmt) ([
 		}
 	}
 
-	var callErrNames []string
-	for _, rightExpr := range assign.Rhs {
-		callExpr, _ := rightExpr.(*ast.CallExpr)
-		if callExpr == nil {
-			continue
-		}
+	wraps := getErrWrapsFromAssignStmt(pass, assign, names)
 
-		callErrNames = append(callErrNames, scanCallForErrNames(callExpr, pass)...)
+	return names, wraps
+}
+
+func getErrWrapsFromAssignStmt(pass *analysis.Pass, assign *ast.AssignStmt, names []string) map[string]stringSet {
+	var rightErrNames []string
+
+	for _, rightExpr := range assign.Rhs {
+		switch expr := rightExpr.(type) {
+		case *ast.CallExpr:
+			rightErrNames = append(rightErrNames, scanCallForErrNames(expr, pass)...)
+		case *ast.Ident:
+			if exprIsError(expr, pass.TypesInfo) {
+				rightErrNames = append(rightErrNames, expr.Name)
+			}
+		}
 	}
-	if len(callErrNames) > 0 {
+
+	var wraps = make(map[string]stringSet)
+	if len(rightErrNames) > 0 {
 		for _, errName := range names {
-			for _, callErrN := range callErrNames {
+			for _, callErrN := range rightErrNames {
 				if wraps[errName] == nil {
 					wraps[errName] = stringSet{callErrN: struct{}{}}
 				} else {
@@ -173,7 +183,7 @@ func getErrorNamesFromAssignStmt(pass *analysis.Pass, assign *ast.AssignStmt) ([
 		}
 	}
 
-	return names, wraps
+	return wraps
 }
 
 func scanCallForErrNames(call *ast.CallExpr, pass *analysis.Pass) []string {

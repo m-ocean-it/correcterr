@@ -613,6 +613,32 @@ func WrappingWithDeclarationBeforeReturning() error {
 	return nil
 }
 
+func AssignCheckedErr() error {
+	err := errors.New("foo")
+	if err != nil {
+		tmpErr := err
+		err := errors.New("bar")
+		if err != nil {
+			return fmt.Errorf("errors: %s, %s", tmpErr, err)
+		}
+	}
+
+	return nil
+}
+
+func AssignCheckedErrViaDeclaration() error {
+	err := errors.New("foo")
+	if err != nil {
+		var tmpErr error = err
+		err := errors.New("bar")
+		if err != nil {
+			return fmt.Errorf("errors: %s, %s", tmpErr, err)
+		}
+	}
+
+	return nil
+}
+
 // ----------------------------------------------------
 // Helpers
 
