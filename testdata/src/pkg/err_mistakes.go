@@ -5,6 +5,8 @@ import (
 	"fmt"
 )
 
+var ExternalError = errors.New("external error")
+
 // ----------------------------------------------------
 // Triggers
 
@@ -269,21 +271,6 @@ func NoInitialLocalErrNames() {
 
 		return nil
 	})
-}
-
-func WrapCycle() error {
-	err := errors.New("error")
-	if err != nil {
-		var wrappedB error
-		wrappedA := fmt.Errorf("wrapped: %w", wrappedB)
-		wrappedB = fmt.Errorf("wrapped: %w", wrappedA)
-		wrappedB = fmt.Errorf("wrapped: %w", wrappedA)
-		wrappedA = fmt.Errorf("wrapped: %w", wrappedB)
-
-		return wrappedB // want "returning not the error that was checked"
-	}
-
-	return nil
 }
 
 // ----------------------------------------------------
@@ -634,6 +621,90 @@ func AssignCheckedErrViaDeclaration() error {
 		if err != nil {
 			return fmt.Errorf("errors: %s, %s", tmpErr, err)
 		}
+	}
+
+	return nil
+}
+
+func PkgError() error {
+	err := errors.New("error")
+	if err != nil {
+		return ExternalError
+	}
+
+	return nil
+}
+
+func WrapCycle() error {
+	err := errors.New("error")
+	if err != nil {
+		var wrappedB error
+		wrappedA := fmt.Errorf("wrapped: %w", wrappedB)
+		wrappedB = fmt.Errorf("wrapped: %w", wrappedA)
+		wrappedB = fmt.Errorf("wrapped: %w", wrappedA)
+		wrappedA = fmt.Errorf("wrapped: %w", wrappedB)
+
+		return wrappedB
+	}
+
+	return nil
+}
+
+func NestedErrorCheckReturnsOuterError() error {
+	err := errors.New("some error")
+
+	if err != nil {
+		if innerErr := errors.New("inner"); innerErr != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func NestedErrorCheckReturnsOuterErrorMessage() error {
+	err := errors.New("some error")
+
+	if err != nil {
+		if innerErr := errors.New("inner"); innerErr != nil {
+			return fmt.Errorf("%w: %s", err, innerErr.Error())
+		}
+	}
+
+	return nil
+}
+
+func NestedErrorCheckReturnsOuterErrorMessage2() error {
+	err := errors.New("some error")
+
+	if err != nil {
+		if innerErr := errors.New("inner"); innerErr != nil {
+			return fmt.Errorf("wrapped: %s", err.Error())
+		}
+	}
+
+	return nil
+}
+
+func Foobar() error {
+	_, err := doSmth()
+	if err != nil {
+		_, errB := doSmth()
+
+		return errB
+	}
+
+	return nil
+}
+
+func More() error {
+	_, err := doSmth()
+	if err != nil {
+		if _, errB := doSmth(); errB != nil {
+			return fmt.Errorf("wrapped: %w", err)
+		}
+
+		return nil
 	}
 
 	return nil
