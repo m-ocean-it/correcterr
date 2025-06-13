@@ -589,6 +589,21 @@ func WrappingWithDeclarationBeforeReturning() error {
 	return nil
 }
 
+func WrapCycle() error {
+	err := errors.New("error")
+	if err != nil {
+		var wrappedB error
+		wrappedA := fmt.Errorf("wrapped: %w", wrappedB)
+		wrappedB = fmt.Errorf("wrapped: %w", wrappedA)
+		wrappedB = fmt.Errorf("wrapped: %w", wrappedA)
+		wrappedA = fmt.Errorf("wrapped: %w", wrappedB)
+
+		return wrappedB // want "returning not the error that was checked"
+	}
+
+	return nil
+}
+
 func closureWrapper(fn func() error) error {
 	return fn()
 }
