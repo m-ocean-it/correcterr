@@ -4,6 +4,8 @@
 
 It's a linter that checks whether the returned error is the same one that was checked in the condition.
 
+Due to the fuzzy nature of error handling in Golang, the linter has to employ certain heuristics to reduce the amount of false-positives. If you encounter obvious false-positives (or false-negatives), feel free to [open an issue](https://github.com/m-ocean-it/correcterr/issues/new).
+
 ### Examples
 
 For more examples, see the `err_mistakes.go` file which is used in automated testing.
@@ -80,8 +82,8 @@ All examples below are sufficient to disable a diagnostic on a specific line:
 //nolint:all
 ```
 
-*Make sure to not add a space in front of `nolint`.*
+*Make sure not to add a space in front of `nolint`.*
 
-## Roadmap
+## [`golangci-lint`](https://github.com/golangci/golangci-lint) integration
 
-- [ ] Pull request to `golangci-lint`
+`correcterr` is [not likely](https://github.com/golangci/golangci-lint/pull/5875) to become a part of linters included in `golangci-lint`, however, I will, probably, implement a [plugin](https://golangci-lint.run/plugins/module-plugins/) to allow easy integration with `golangci-lint` "by hand".
