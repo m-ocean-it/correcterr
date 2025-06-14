@@ -6,6 +6,8 @@ It's a linter that checks whether the returned error is the same one that was ch
 
 Due to the fuzzy nature of error handling in Golang, the linter has to employ certain heuristics to reduce the amount of false-positives. If you encounter obvious false-positives (or false-negatives), feel free to [open an issue](https://github.com/m-ocean-it/correcterr/issues/new).
 
+The linter, as it turned out, is quite similar to [`nilnesserr`](https://github.com/alingse/nilnesserr) and [seems](https://github.com/m-ocean-it/correcterr/issues/2#issuecomment-2972835988) to find a lot of the same problems, however, it [detects](https://github.com/m-ocean-it/correcterr/issues/2#issuecomment-2972844048) some additional mistakes which `nilnesserr` fails to identify (as of June 14, 2025).
+
 ### Examples
 
 For more examples, see the `err_mistakes.go` file which is used in automated testing.
