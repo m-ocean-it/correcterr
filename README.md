@@ -6,7 +6,7 @@ It's a linter that checks whether the returned error is the same one that was ch
 
 Due to the fuzzy nature of error handling in Golang, the linter has to employ certain heuristics to reduce the amount of false-positives. If you encounter obvious false-positives (or false-negatives), feel free to [open an issue](https://github.com/m-ocean-it/correcterr/issues/new).
 
-The linter, as it turned out, is quite similar to [`nilnesserr`](https://github.com/alingse/nilnesserr) and [seems](https://github.com/m-ocean-it/correcterr/issues/2#issuecomment-2972835988) to find a lot of the same problems, however, it [detects](https://github.com/m-ocean-it/correcterr/issues/2#issuecomment-2972844048) some additional mistakes which `nilnesserr` fails to identify (as of June 14, 2025).
+The linter, as it turned out, is quite similar to [`nilnesserr`](https://github.com/alingse/nilnesserr) and [seems](https://github.com/m-ocean-it/correcterr/issues/2#issuecomment-2972835988) to find a lot of the same problems, however, both linters [detect]((https://github.com/m-ocean-it/correcterr/issues/2#issuecomment-2972844048)) some mistakes that the other one fails to identify.
 
 ### Examples
 
@@ -89,3 +89,10 @@ All examples below are sufficient to disable a diagnostic on a specific line:
 ## [`golangci-lint`](https://github.com/golangci/golangci-lint) integration
 
 `correcterr` is [not likely](https://github.com/golangci/golangci-lint/pull/5875) to become a part of linters included in `golangci-lint`, however, I will, probably, implement a [plugin](https://golangci-lint.run/plugins/module-plugins/) to allow easy integration with `golangci-lint` "by hand".
+
+## Roadmap
+
+- [ ] Formalize the principles on which the linter operates
+- [ ] Implement a `golangci-lint` [plugin](https://golangci-lint.run/plugins/module-plugins/)
+- [ ] Differentiate diagnostic messages based on specific cases
+- [ ] Improve speed of execution
