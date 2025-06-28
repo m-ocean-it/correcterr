@@ -7,6 +7,12 @@ import (
 
 var ExternalError = errors.New("external error")
 
+var ExternalErrors = struct {
+	ExtError error
+}{
+	ExtError: errors.New("ExtError"),
+}
+
 // ----------------------------------------------------
 // Triggers
 
@@ -47,17 +53,6 @@ func ErrorfWrap() error {
 
 	if err1 != nil {
 		return fmt.Errorf("error: %w", err2) // want "returning not the error that was checked"
-	}
-
-	return nil
-}
-
-func ErrorfWrap2() error {
-	err1 := errors.New("1")
-	err2 := errors.New("2")
-
-	if err1 != nil {
-		return fmt.Errorf("errors: %w, %w", err1, err2) // want "returning not the error that was checked"
 	}
 
 	return nil
@@ -322,6 +317,45 @@ func CheckingAndReturningDifferentErrorsNoLintCorrecterr() error {
 
 // ----------------------------------------------------
 // Non-triggers
+
+func ErrorfWrap2() error {
+	err1 := errors.New("1")
+	err2 := errors.New("2")
+
+	if err1 != nil {
+		return fmt.Errorf("errors: %w, %w", err1, err2)
+	}
+
+	return nil
+}
+
+type someStruct struct {
+	val int
+	err error
+}
+
+var structs = []someStruct{}
+
+func ReturnFieldOfStruct() (int, error) {
+	for _, s := range structs {
+		if s.val > 1 {
+			return s.val, s.err
+		}
+	}
+
+	return 0, nil
+}
+
+func ReturnFieldOfStruct2() error {
+	cond1 := true
+	cond2 := true
+
+	if cond1 && cond2 {
+		return fmt.Errorf("%w, upload_id = %s", ExternalErrors.ExtError, 12)
+	}
+
+	return nil
+}
 
 func Correct() error {
 	var err1 = errors.New("1")

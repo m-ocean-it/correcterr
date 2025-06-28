@@ -360,31 +360,38 @@ func inspectReturnStmt(st state, retStmt *ast.ReturnStmt) {
 		}
 	}
 
+	var hasErrors bool
+
 	for _, res := range retStmt.Results {
 		if !exprIsError(res, st.pass.TypesInfo) {
 			continue
 		}
-
-		var toReport bool
+		hasErrors = true
 
 		switch returnVal := res.(type) {
 
 		case *ast.Ident:
-			if !returnedErrIsFine(st, returnVal.Name) {
-				toReport = true
+			if returnedErrIsFine(st, returnVal.Name) {
+				return
 			}
 
 		case *ast.CallExpr:
 			if inspectCall(st, returnVal) {
-				toReport = true
+				return
 			}
-		}
 
-		if toReport {
-			st.pass.Reportf(retStmt.Pos(), "returning not the error that was checked")
+		case *ast.SelectorExpr:
+			if returnedErrIsFine(st, returnVal.Sel.Name) {
+				return
+			}
 
+		default:
 			return
 		}
+	}
+
+	if hasErrors {
+		st.pass.Reportf(retStmt.Pos(), "returning not the error that was checked")
 	}
 }
 
@@ -424,28 +431,38 @@ func tryGetCheckedErrFromIfStmt(pass *analysis.Pass, ifStmt *ast.IfStmt) *ast.Id
 }
 
 func inspectCall(st state, call *ast.CallExpr) bool {
+	var hasErrors bool
+
 	for _, arg := range call.Args {
 		if !exprIsError(arg, st.pass.TypesInfo) {
 			continue
 		}
+		hasErrors = true
 
 		switch errArg := arg.(type) {
 		case *ast.Ident:
-			if !returnedErrIsFine(st, errArg.Name) {
+			if returnedErrIsFine(st, errArg.Name) {
 				return true
 			}
 		case *ast.CallExpr:
 			if inspectCall(st, errArg) {
 				return true
 			}
+		case *ast.SelectorExpr:
+			if returnedErrIsFine(st, errArg.Sel.Name) {
+				return true
+			}
 		}
 	}
 
-	return false
+	if hasErrors {
+		return false
+	}
+
+	return true
 }
 
-func returnedErrIsFine(st state, errName string,
-) bool {
+func returnedErrIsFine(st state, errName string) bool {
 	if len(st.errNames.checked) == 0 {
 		return true
 	}
@@ -456,6 +473,10 @@ func returnedErrIsFine(st state, errName string,
 func returnedErrIsFineInner(st state, errName string, alreadyChecked stringSet) bool {
 	if _, ok := alreadyChecked[errName]; ok {
 		return false
+	}
+
+	if len(st.errNames.checked) == 0 {
+		return true
 	}
 
 	if _, ok := st.errNames.checked[errName]; ok {
