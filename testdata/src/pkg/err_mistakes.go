@@ -89,6 +89,19 @@ func TripleFooWrapOfWrongError() error {
 	return nil
 }
 
+func NoInitialLocalErrNames() {
+	closureWrapper(func() error {
+		innerErr := errors.New("inner")
+		anotherInnerErr := errors.New("another")
+
+		if innerErr != nil {
+			return anotherInnerErr // want "returning not the error that was checked"
+		}
+
+		return nil
+	})
+}
+
 // ----------------------------------------------------
 // Non-triggers
 
@@ -120,6 +133,10 @@ func Correct() error {
 
 // ----------------------------------------------------
 // Helpers
+
+func closureWrapper(fn func() error) error {
+	return fn()
+}
 
 func fooWrap(_ int, err error, _ string) error {
 	return err
