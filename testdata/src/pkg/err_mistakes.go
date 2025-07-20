@@ -65,6 +65,19 @@ func AssignFuncLit() error {
 	return funcLitErr
 }
 
+func NestedIfStatements() error {
+	err := errors.New("error")
+	anotherErr := errors.New("another")
+
+	if true {
+		if err != nil {
+			return anotherErr // want "returning not the error that was checked"
+		}
+	}
+
+	return nil
+}
+
 // ----------------------------------------------------
 // Non-triggers
 
