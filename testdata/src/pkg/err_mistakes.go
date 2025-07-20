@@ -18,6 +18,15 @@ func CheckingAndReturningDifferentErrors() error {
 	return nil
 }
 
+func CheckingAndReturningDifferentErrors2() error {
+	var err1 = errors.New("1")
+	if err2 := errors.New("2"); err2 != nil {
+		return err1 // want "returning not the error that was checked"
+	}
+
+	return nil
+}
+
 // ----------------------------------------------------
 // Non-triggers
 
