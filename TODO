@@ -1,0 +1,2 @@
+- Account for several return values of functions. Not all of them might be errors
+- Don't record "_" as local err name

@@ -3,6 +3,7 @@ package func_visitor
 import (
 	"go/ast"
 	"go/token"
+	"go/types"
 	"maps"
 
 	"github.com/m-ocean-it/correcterr/analyzer/utils"
@@ -12,18 +13,20 @@ import (
 type anySet = map[any]struct{}
 
 type funcVisitor struct {
-	pass              *analysis.Pass
-	commentMap        ast.CommentMap
-	checkedErrorDecls anySet
-	wraps             map[*ast.Ident]*ast.Ident
+	pass                   *analysis.Pass
+	commentMap             ast.CommentMap
+	checkedErrorDecls      anySet
+	wraps                  map[*ast.Ident]*ast.Ident
+	maybeCurentIfStmtScope *types.Scope
 }
 
 func New(pass *analysis.Pass, commentMap ast.CommentMap) ast.Visitor {
 	return &funcVisitor{
-		pass:              pass,
-		commentMap:        commentMap,
-		checkedErrorDecls: make(anySet),
-		wraps:             make(map[*ast.Ident]*ast.Ident),
+		pass:                   pass,
+		commentMap:             commentMap,
+		checkedErrorDecls:      make(anySet),
+		wraps:                  make(map[*ast.Ident]*ast.Ident),
+		maybeCurentIfStmtScope: nil,
 	}
 }
 
@@ -31,12 +34,14 @@ func cloneVisitor(
 	v *funcVisitor,
 	checkedErrorDecls anySet,
 	wraps map[*ast.Ident]*ast.Ident,
+	maybeIfStmtScope *types.Scope,
 ) *funcVisitor {
 	return &funcVisitor{
-		pass:              v.pass,
-		commentMap:        v.commentMap,
-		checkedErrorDecls: checkedErrorDecls,
-		wraps:             wraps,
+		pass:                   v.pass,
+		commentMap:             v.commentMap,
+		checkedErrorDecls:      checkedErrorDecls,
+		wraps:                  wraps,
+		maybeCurentIfStmtScope: maybeIfStmtScope,
 	}
 }
 
@@ -68,6 +73,7 @@ func visitIfStmt(visitor *funcVisitor, ifStmt *ast.IfStmt) *funcVisitor {
 		visitor,
 		checkedErrDecls,
 		visitor.wraps,
+		visitor.pass.TypesInfo.Scopes[ifStmt],
 	)
 }
 
@@ -125,6 +131,10 @@ func getMaybeCheckedErrorDeclFromIfCondition(pass *analysis.Pass, ifStmt *ast.If
 
 func checkReturnErrIdent(v *funcVisitor, returnIdent *ast.Ident) bool {
 	if len(v.checkedErrorDecls) == 0 {
+		return true
+	}
+
+	if v.maybeCurentIfStmtScope != nil && v.maybeCurentIfStmtScope.Contains(returnIdent.Obj.Pos()) {
 		return true
 	}
 

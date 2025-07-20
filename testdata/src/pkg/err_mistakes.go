@@ -102,6 +102,20 @@ func NoInitialLocalErrNames() {
 	})
 }
 
+func Foobar2() error {
+	_, err := doSmth()
+	_, err2 := doSmth()
+
+	if err != nil {
+		_, errB := doSmth()
+		_ = errB
+
+		return err2 // want "returning not the error that was checked"
+	}
+
+	return nil
+}
+
 // ----------------------------------------------------
 // Non-triggers
 
@@ -131,6 +145,31 @@ func Correct() error {
 	return nil
 }
 
+func Foobar() error {
+	_, err := doSmth()
+	if err != nil {
+		_, errB := doSmth()
+
+		return errB
+	}
+
+	return nil
+}
+
+func Foobar3() error {
+	_, err := doSmth()
+	if err != nil {
+		_, errB := doSmth()
+		if errB != nil {
+			_, errC := doSmth()
+
+			return errC
+		}
+	}
+
+	return nil
+}
+
 // ----------------------------------------------------
 // Helpers
 
@@ -140,4 +179,8 @@ func closureWrapper(fn func() error) error {
 
 func fooWrap(_ int, err error, _ string) error {
 	return err
+}
+
+func doSmth() (int, error) {
+	return 0, errors.New("doSmth failed")
 }
