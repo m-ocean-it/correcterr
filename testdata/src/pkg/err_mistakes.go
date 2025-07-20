@@ -39,6 +39,18 @@ func ErrorfWrap() error {
 	return nil
 }
 
+func FuncLit() {
+	var err error
+
+	func() error {
+		if innerErr := errors.New("inner"); innerErr != nil {
+			return err // want "returning not the error that was checked"
+		}
+
+		return nil
+	}()
+}
+
 // ----------------------------------------------------
 // Non-triggers
 
