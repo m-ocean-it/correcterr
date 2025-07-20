@@ -92,6 +92,17 @@ func TripleFooWrapOfWrongError() error {
 // ----------------------------------------------------
 // Non-triggers
 
+func ErrorfWrap2() error {
+	err1 := errors.New("1")
+	err2 := errors.New("2")
+
+	if err1 != nil {
+		return fmt.Errorf("errors: %w, %w", err1, err2)
+	}
+
+	return nil
+}
+
 func Correct() error {
 	var err1 = errors.New("1")
 	var err2 = errors.New("2")
