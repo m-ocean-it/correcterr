@@ -2,10 +2,9 @@ package analyzer
 
 import (
 	"go/ast"
-	"go/token"
-	"go/types"
 	"maps"
 
+	"github.com/m-ocean-it/correcterr/analyzer/func_visitor"
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/passes/inspect"
 	"golang.org/x/tools/go/ast/inspector"
@@ -22,15 +21,6 @@ var Analyzer = &analysis.Analyzer{
 	Doc:      "Checks that the returned error is the one that was checked",
 	Run:      run,
 	Requires: []*analysis.Analyzer{inspect.Analyzer},
-}
-
-type anySet = map[any]struct{}
-
-type state struct {
-	pass              *analysis.Pass
-	checkedErrorDecls anySet
-	wraps             map[*ast.Ident]*ast.Ident
-	commentMap        ast.CommentMap
 }
 
 func run(pass *analysis.Pass) (any, error) {
@@ -50,148 +40,10 @@ func run(pass *analysis.Pass) (any, error) {
 			return
 		}
 
-		st := state{
-			pass:              pass,
-			checkedErrorDecls: make(anySet),
-			wraps:             make(map[*ast.Ident]*ast.Ident),
-			commentMap:        commentMap,
-		}
+		thisFuncVisitor := func_visitor.New(pass, commentMap)
 
-		processFuncNode(st, funcNode)
+		ast.Walk(thisFuncVisitor, funcNode)
 	})
 
 	return nil, nil
-}
-
-func processFuncNode(st state, funcNode *ast.FuncDecl) {
-	for _, bodyElem := range funcNode.Body.List {
-		ifStmt, ok := bodyElem.(*ast.IfStmt)
-		if !ok {
-			continue
-		}
-
-		processIfStmt(st, ifStmt)
-	}
-}
-
-func processIfStmt(st state, ifStmt *ast.IfStmt) {
-	maybeCheckedError := getMaybeCheckedErrorDeclFromIfCondition(st.pass, ifStmt)
-	if maybeCheckedError != nil {
-		st.checkedErrorDecls = maps.Clone(st.checkedErrorDecls)
-		st.checkedErrorDecls[maybeCheckedError] = struct{}{}
-	}
-
-	for _, ifBodyElem := range ifStmt.Body.List {
-		switch e := ifBodyElem.(type) {
-		case *ast.IfStmt:
-			processIfStmt(st, e)
-		case *ast.ReturnStmt:
-			processReturnStmt(st, e)
-		}
-	}
-}
-
-func getMaybeCheckedErrorDeclFromIfCondition(pass *analysis.Pass, ifStmt *ast.IfStmt) any {
-	binaryCondition, _ := ifStmt.Cond.(*ast.BinaryExpr)
-	if binaryCondition == nil {
-		return nil
-	}
-
-	if binaryCondition.Op != token.NEQ {
-		return nil
-	}
-
-	if !exprIsError(binaryCondition.X, pass.TypesInfo) {
-		return nil
-	}
-
-	checkedError, ok := binaryCondition.X.(*ast.Ident)
-	if !ok {
-		return nil
-	}
-
-	rightVar, ok := binaryCondition.Y.(*ast.Ident)
-	if !ok {
-		return nil
-	}
-
-	if rightVar.Obj != nil {
-		return nil
-	}
-
-	if rightVar.Name != "nil" {
-		return nil
-	}
-
-	return checkedError.Obj.Decl
-}
-
-func processReturnStmt(st state, returnStmt *ast.ReturnStmt) {
-	for _, expr := range returnStmt.Results {
-		if !exprIsError(expr, st.pass.TypesInfo) {
-			continue
-		}
-
-		switch e := expr.(type) {
-		case *ast.Ident:
-			checkReturnErrIdent(st, e)
-		case *ast.CallExpr:
-			checkReturnErrCall(st, e)
-		}
-	}
-}
-
-func checkReturnErrIdent(st state, returnIdent *ast.Ident) bool {
-	returnIdentDecl := returnIdent.Obj.Decl
-
-	_, wasChecked := st.checkedErrorDecls[returnIdentDecl]
-
-	if wasChecked {
-		return true
-	}
-
-	st.pass.Reportf(returnIdent.Pos(), "returning not the error that was checked")
-
-	return false
-}
-
-func checkReturnErrCall(st state, call *ast.CallExpr) bool {
-	var hasErrors bool
-
-	for _, arg := range call.Args {
-		if !exprIsError(arg, st.pass.TypesInfo) {
-			continue
-		}
-		hasErrors = true
-
-		switch errArg := arg.(type) {
-		case *ast.Ident:
-			if checkReturnErrIdent(st, errArg) {
-				return true
-			}
-		case *ast.CallExpr:
-			if checkReturnErrCall(st, errArg) {
-				return true
-			}
-		case *ast.SelectorExpr:
-			if checkReturnErrIdent(st, errArg.Sel) {
-				return true
-			}
-		}
-	}
-
-	if hasErrors {
-		return false
-	}
-
-	return true
-}
-
-func exprIsError(v ast.Expr, info *types.Info) bool {
-	if n, ok := info.TypeOf(v).(*types.Named); ok {
-		o := n.Obj()
-		return o != nil && o.Pkg() == nil && o.Name() == "error"
-	}
-
-	return false
 }
