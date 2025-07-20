@@ -124,6 +124,10 @@ func getMaybeCheckedErrorDeclFromIfCondition(pass *analysis.Pass, ifStmt *ast.If
 }
 
 func checkReturnErrIdent(v *funcVisitor, returnIdent *ast.Ident) bool {
+	if len(v.checkedErrorDecls) == 0 {
+		return true
+	}
+
 	returnIdentDecl := returnIdent.Obj.Decl
 
 	_, wasChecked := v.checkedErrorDecls[returnIdentDecl]

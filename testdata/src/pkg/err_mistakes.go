@@ -51,6 +51,20 @@ func FuncLit() {
 	}()
 }
 
+func AssignFuncLit() error {
+	var err error
+
+	funcLitErr := func() error {
+		if innerErr := errors.New("inner"); innerErr != nil {
+			return err // want "returning not the error that was checked"
+		}
+
+		return nil
+	}()
+
+	return funcLitErr
+}
+
 // ----------------------------------------------------
 // Non-triggers
 
