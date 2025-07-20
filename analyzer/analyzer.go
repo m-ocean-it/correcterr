@@ -128,21 +128,63 @@ func getMaybeCheckedErrorDeclFromIfCondition(pass *analysis.Pass, ifStmt *ast.If
 
 func processReturnStmt(st state, returnStmt *ast.ReturnStmt) {
 	for _, expr := range returnStmt.Results {
+		if !exprIsError(expr, st.pass.TypesInfo) {
+			continue
+		}
+
 		switch e := expr.(type) {
 		case *ast.Ident:
-			checkReturnIdent(st, e)
+			checkReturnErrIdent(st, e)
+		case *ast.CallExpr:
+			checkReturnErrCall(st, e)
 		}
 	}
 }
 
-func checkReturnIdent(st state, returnIdent *ast.Ident) {
+func checkReturnErrIdent(st state, returnIdent *ast.Ident) bool {
 	returnIdentDecl := returnIdent.Obj.Decl
 
 	_, wasChecked := st.checkedErrorDecls[returnIdentDecl]
 
-	if !wasChecked {
-		st.pass.Reportf(returnIdent.Pos(), "returning not the error that was checked")
+	if wasChecked {
+		return true
 	}
+
+	st.pass.Reportf(returnIdent.Pos(), "returning not the error that was checked")
+
+	return false
+}
+
+func checkReturnErrCall(st state, call *ast.CallExpr) bool {
+	var hasErrors bool
+
+	for _, arg := range call.Args {
+		if !exprIsError(arg, st.pass.TypesInfo) {
+			continue
+		}
+		hasErrors = true
+
+		switch errArg := arg.(type) {
+		case *ast.Ident:
+			if checkReturnErrIdent(st, errArg) {
+				return true
+			}
+		case *ast.CallExpr:
+			if checkReturnErrCall(st, errArg) {
+				return true
+			}
+		case *ast.SelectorExpr:
+			if checkReturnErrIdent(st, errArg.Sel) {
+				return true
+			}
+		}
+	}
+
+	if hasErrors {
+		return false
+	}
+
+	return true
 }
 
 func exprIsError(v ast.Expr, info *types.Info) bool {
