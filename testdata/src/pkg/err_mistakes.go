@@ -78,6 +78,17 @@ func NestedIfStatements() error {
 	return nil
 }
 
+func TripleFooWrapOfWrongError() error {
+	err := errors.New("error")
+	anotherError := errors.New("another")
+
+	if err != nil {
+		return fooWrap(1, fooWrap(2, fooWrap(3, anotherError, "c"), "b"), "a") // want "returning not the error that was checked"
+	}
+
+	return nil
+}
+
 // ----------------------------------------------------
 // Non-triggers
 
@@ -94,4 +105,11 @@ func Correct() error {
 	}
 
 	return nil
+}
+
+// ----------------------------------------------------
+// Helpers
+
+func fooWrap(_ int, err error, _ string) error {
+	return err
 }
