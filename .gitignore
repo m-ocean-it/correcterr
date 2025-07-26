@@ -1,1 +1,6 @@
-bin
+.gitignore
+.vscode
+correcterr
+TODO
+todo
+

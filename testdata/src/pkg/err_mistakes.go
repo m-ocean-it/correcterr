@@ -19,6 +19,17 @@ func CheckingAndReturningDifferentErrors() error {
 	return nil
 }
 
+func CheckingAndReturningDifferentErrorsNoLintNoCorrecterr() error {
+	var err1 = errors.New("1")
+	var err2 = errors.New("2")
+
+	if err1 != nil {
+		return err2 //nolint:foo,bar // want "returning not the error that was checked"
+	}
+
+	return nil
+}
+
 func CheckingAndReturningDifferentErrors2() error {
 	var err1 = errors.New("1")
 	if err2 := errors.New("2"); err2 != nil {
@@ -63,6 +74,46 @@ func AssignFuncLit() error {
 	}()
 
 	return funcLitErr
+}
+
+func Switch() error {
+	var err error
+
+	switch {
+	case false:
+	case true:
+		if innerErr := errors.New("inner"); innerErr != nil {
+			return err // want "returning not the error that was checked"
+		}
+	}
+
+	return nil
+}
+
+func RangeStmt() error {
+	var err error
+
+	for range 5 {
+		if innerErr := errors.New("inner"); innerErr != nil {
+			return err // want "returning not the error that was checked"
+		}
+	}
+
+	return nil
+}
+
+func ForStmt() error {
+	err := errors.New("error")
+
+	for i := 0; i < 5; i++ {
+		_ = i
+
+		if innerErr := errors.New("inner"); innerErr != nil {
+			return err // want "returning not the error that was checked"
+		}
+	}
+
+	return nil
 }
 
 func NestedIfStatements() error {
