@@ -638,6 +638,17 @@ func AssignCheckedErr() error {
 	err := errors.New("foo")
 	if err != nil {
 		tmpErr := err
+
+		return tmpErr
+	}
+
+	return nil
+}
+
+func AssignCheckedErr2() error {
+	err := errors.New("foo")
+	if err != nil {
+		tmpErr := err
 		err := errors.New("bar")
 		if err != nil {
 			return fmt.Errorf("errors: %s, %s", tmpErr, err)
@@ -648,6 +659,17 @@ func AssignCheckedErr() error {
 }
 
 func AssignCheckedErrViaDeclaration() error {
+	err := errors.New("foo")
+	if err != nil {
+		var tmpErr error = err
+
+		return tmpErr
+	}
+
+	return nil
+}
+
+func AssignCheckedErrViaDeclaration2() error {
 	err := errors.New("foo")
 	if err != nil {
 		var tmpErr error = err
