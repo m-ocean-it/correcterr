@@ -20,31 +20,33 @@ const (
 
 type anySet = map[any]struct{}
 
-type funcVisitor struct {
-	pass                   *analysis.Pass
-	commentMap             ast.CommentMap
-	checkedErrorDecls      anySet
-	wraps                  map[*ast.Ident]*ast.Ident
+type FuncVisitor struct {
+	pass              *analysis.Pass
+	commentMap        ast.CommentMap
+	checkedErrorDecls anySet
+	wraps             map[*ast.Ident][]*ast.Ident
+
 	maybeCurentIfStmtScope *types.Scope
+	errScopes              map[*ast.Ident]*types.Scope
 }
 
-func New(pass *analysis.Pass, commentMap ast.CommentMap) ast.Visitor {
-	return &funcVisitor{
+func New(pass *analysis.Pass, commentMap ast.CommentMap) *FuncVisitor {
+	return &FuncVisitor{
 		pass:                   pass,
 		commentMap:             commentMap,
 		checkedErrorDecls:      make(anySet),
-		wraps:                  make(map[*ast.Ident]*ast.Ident),
+		wraps:                  make(map[*ast.Ident][]*ast.Ident),
 		maybeCurentIfStmtScope: nil,
 	}
 }
 
 func cloneVisitor(
-	v *funcVisitor,
+	v *FuncVisitor,
 	checkedErrorDecls anySet,
-	wraps map[*ast.Ident]*ast.Ident,
+	wraps map[*ast.Ident][]*ast.Ident,
 	maybeIfStmtScope *types.Scope,
-) *funcVisitor {
-	return &funcVisitor{
+) *FuncVisitor {
+	return &FuncVisitor{
 		pass:                   v.pass,
 		commentMap:             v.commentMap,
 		checkedErrorDecls:      checkedErrorDecls,
@@ -53,22 +55,56 @@ func cloneVisitor(
 	}
 }
 
-func (fv *funcVisitor) Visit(node ast.Node) ast.Visitor {
+func (fv *FuncVisitor) Visit(node ast.Node, _ bool, stack []ast.Node) bool {
 	if node == nil {
-		return nil
+		return false
 	}
 
-	switch n := node.(type) {
-	case *ast.IfStmt:
-		return visitIfStmt(fv, n)
-	case *ast.ReturnStmt:
-		return visitReturnStmt(fv, n)
-	default:
-		return fv
-	}
+	return fv.visit(node, stack)
 }
 
-func visitIfStmt(visitor *funcVisitor, ifStmt *ast.IfStmt) *funcVisitor {
+func (fv *FuncVisitor) visit(node ast.Node, stack []ast.Node) bool {
+	switch n := node.(type) {
+	case *ast.Ident:
+		fv.visitIdent(n, stack)
+	case *ast.IfStmt:
+		visitIfStmt(fv, n)
+	case *ast.ReturnStmt:
+		visitReturnStmt(fv, n)
+	case *ast.AssignStmt:
+		visitAssignStmt(fv, n)
+	}
+
+	return true
+}
+
+func (fv *FuncVisitor) visitIdent(ident *ast.Ident, stack []ast.Node) {
+
+}
+
+func visitAssignStmt(v *FuncVisitor, assignStmt *ast.AssignStmt) {
+	var leftErrors, rightErrors *ast.Ident
+
+	for _, leftExpr := range assignStmt.Lhs {
+		if !utils.ExprIsError(leftExpr, v.pass.TypesInfo) {
+			continue
+		}
+
+		leftIdent, ok := leftExpr.(*ast.Ident)
+		if !ok {
+			continue
+		}
+
+		// v.errScopes[leftIdent] =
+
+		_ = leftIdent
+	}
+
+	_ = leftErrors
+	_ = rightErrors
+}
+
+func visitIfStmt(visitor *FuncVisitor, ifStmt *ast.IfStmt) *FuncVisitor {
 	checkedErrDecls := visitor.checkedErrorDecls
 
 	maybeCheckedError := getMaybeCheckedErrorDeclFromIfCondition(visitor.pass, ifStmt)
@@ -77,7 +113,10 @@ func visitIfStmt(visitor *funcVisitor, ifStmt *ast.IfStmt) *funcVisitor {
 		checkedErrDecls[maybeCheckedError] = struct{}{}
 	}
 
-	return cloneVisitor(
+	return cloneVisitor( // TODO надо соотносить это со стэком нодов
+		// В данном случае if-scope как бы крепиться к какому-то уровню стэка.
+		// Если стэк сократиться больше этого уровня, то инфа об ифе
+		// должна быть забыта.
 		visitor,
 		checkedErrDecls,
 		visitor.wraps,
@@ -85,7 +124,7 @@ func visitIfStmt(visitor *funcVisitor, ifStmt *ast.IfStmt) *funcVisitor {
 	)
 }
 
-func visitReturnStmt(visitor *funcVisitor, returnStmt *ast.ReturnStmt) *funcVisitor {
+func visitReturnStmt(visitor *FuncVisitor, returnStmt *ast.ReturnStmt) *FuncVisitor {
 	if retStmtCommentGroup, ok := visitor.commentMap[returnStmt]; ok {
 		if checkCommentGroupsForNoLint(retStmtCommentGroup) {
 			return visitor
@@ -143,7 +182,7 @@ func getMaybeCheckedErrorDeclFromIfCondition(pass *analysis.Pass, ifStmt *ast.If
 	return checkedError.Obj.Decl
 }
 
-func checkReturnErrIdent(v *funcVisitor, returnIdent *ast.Ident) bool {
+func checkReturnErrIdent(v *FuncVisitor, returnIdent *ast.Ident) bool {
 	if len(v.checkedErrorDecls) == 0 {
 		return true
 	}
@@ -160,12 +199,16 @@ func checkReturnErrIdent(v *funcVisitor, returnIdent *ast.Ident) bool {
 		return true
 	}
 
+	// returnIdentDecl
+
+	// TODO check wraps
+
 	v.pass.Reportf(returnIdent.Pos(), "returning not the error that was checked")
 
 	return false
 }
 
-func checkReturnErrCall(v *funcVisitor, call *ast.CallExpr) bool {
+func checkReturnErrCall(v *FuncVisitor, call *ast.CallExpr) bool {
 	var hasErrors bool
 
 	for _, arg := range call.Args {

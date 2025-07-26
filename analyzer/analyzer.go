@@ -26,18 +26,9 @@ func run(pass *analysis.Pass) (any, error) {
 		maps.Copy(commentMap, cmap)
 	}
 
-	nodeFilter := []ast.Node{(*ast.FuncDecl)(nil)}
+	visitor := func_visitor.New(pass, commentMap)
 
-	inspector.Preorder(nodeFilter, func(node ast.Node) {
-		funcNode, _ := node.(*ast.FuncDecl)
-		if funcNode == nil {
-			return
-		}
-
-		thisFuncVisitor := func_visitor.New(pass, commentMap)
-
-		ast.Walk(thisFuncVisitor, funcNode)
-	})
+	inspector.WithStack(nil, visitor.Visit)
 
 	return nil, nil
 }
