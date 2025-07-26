@@ -10,12 +10,6 @@ import (
 	"golang.org/x/tools/go/ast/inspector"
 )
 
-const (
-	nolintDirective = "nolint"
-	nolintName      = "correcterr"
-	nolintAll       = "all"
-)
-
 var Analyzer = &analysis.Analyzer{
 	Name:     "correcterr",
 	Doc:      "Checks that the returned error is the one that was checked",

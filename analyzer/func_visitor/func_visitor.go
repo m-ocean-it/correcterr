@@ -5,9 +5,17 @@ import (
 	"go/token"
 	"go/types"
 	"maps"
+	"slices"
+	"strings"
 
 	"github.com/m-ocean-it/correcterr/analyzer/utils"
 	"golang.org/x/tools/go/analysis"
+)
+
+const (
+	nolintDirective = "nolint"
+	nolintName      = "correcterr"
+	nolintAll       = "all"
 )
 
 type anySet = map[any]struct{}
@@ -78,6 +86,12 @@ func visitIfStmt(visitor *funcVisitor, ifStmt *ast.IfStmt) *funcVisitor {
 }
 
 func visitReturnStmt(visitor *funcVisitor, returnStmt *ast.ReturnStmt) *funcVisitor {
+	if retStmtCommentGroup, ok := visitor.commentMap[returnStmt]; ok {
+		if checkCommentGroupsForNoLint(retStmtCommentGroup) {
+			return visitor
+		}
+	}
+
 	for _, expr := range returnStmt.Results {
 		if !utils.ExprIsError(expr, visitor.pass.TypesInfo) {
 			continue
@@ -181,4 +195,39 @@ func checkReturnErrCall(v *funcVisitor, call *ast.CallExpr) bool {
 	}
 
 	return true
+}
+
+func checkCommentGroupsForNoLint(commGroups []*ast.CommentGroup) bool {
+	for _, cgroup := range commGroups {
+		for _, comment := range cgroup.List {
+			nolintTrimmed := strings.TrimPrefix(comment.Text, "//"+nolintDirective)
+			if len(nolintTrimmed) == len(comment.Text) {
+				continue
+			}
+
+			if nolintTrimmed == "" {
+				return true
+			}
+
+			colonTrimmed := strings.TrimPrefix(nolintTrimmed, ":")
+			if len(colonTrimmed) == len(nolintTrimmed) {
+				continue
+			}
+
+			nolintList := func() []string {
+				list := strings.Split(colonTrimmed, ",")
+				for i, linterName := range list {
+					list[i] = strings.TrimSpace(linterName)
+				}
+
+				return list
+			}()
+
+			if slices.Contains(nolintList, nolintAll) || slices.Contains(nolintList, nolintName) {
+				return true
+			}
+		}
+	}
+
+	return false
 }
