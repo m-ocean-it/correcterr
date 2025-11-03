@@ -744,6 +744,8 @@ func More() error {
 	return nil
 }
 
+func EmptyBody() error
+
 // ----------------------------------------------------
 // Helpers
 

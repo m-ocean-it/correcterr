@@ -69,6 +69,10 @@ func run(pass *analysis.Pass) (any, error) {
 			commentMap: commentMap,
 		}
 
+		if funcNode.Body == nil {
+			return
+		}
+
 		inspectStatements(st, funcNode.Body.List)
 	})
 
