@@ -2,6 +2,7 @@
 
 SRC := $(shell find . -type f -name '*.go' ! -name '*_test.go')
 
+.PHONY: build
 build: ./bin/correcterr
 
 run: build
@@ -13,6 +14,7 @@ test:
 clean:
 	rm -rf ./bin
 
+.PHONY: ./bin/correcterr
 ./bin/correcterr: $(SRC) | ./bin
 	go build -o ./bin/correcterr ./cmd/correcterr
 
