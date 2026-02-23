@@ -1,6 +1,6 @@
 module github.com/m-ocean-it/correcterr
 
-go 1.25.4
+go 1.26.0
 
 require (
 	github.com/pkg/errors v0.9.1
